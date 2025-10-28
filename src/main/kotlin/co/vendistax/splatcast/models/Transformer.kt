@@ -31,6 +31,8 @@ data class CreateTransformerRequest(
 
 @Serializable
 data class UpdateTransformerRequest(
+    val fromSchema: String? = null, // NULL = any schema
+    val toSchema: String? = null,
     val code: String? = null,
     val timeoutMs: Int? = null,
     val enabled: Boolean? = null

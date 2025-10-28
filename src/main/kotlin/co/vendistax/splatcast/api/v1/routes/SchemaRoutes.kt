@@ -1,5 +1,7 @@
 package co.vendistax.splatcast.api.v1.routes
 
+import co.vendistax.splatcast.logging.Logger
+import co.vendistax.splatcast.logging.LoggerFactory
 import co.vendistax.splatcast.models.CreateSchemaRequest
 import co.vendistax.splatcast.models.UpdateSchemaRequest
 import co.vendistax.splatcast.services.SchemaService
@@ -8,7 +10,10 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
-fun Route.schemaRoutes(schemaService: SchemaService) {
+fun Route.schemaRoutes(
+    schemaService: SchemaService,
+    logger: Logger = LoggerFactory.getLogger("schemaRoutes"),
+){
     route("/apps/{appId}/topics/{topicId}/schemas") {
 
         // POST /apps/{appId}/topics/{topicId}/schemas - Create schema

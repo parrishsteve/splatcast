@@ -1,5 +1,7 @@
 package co.vendistax.splatcast.api.v1.routes
 
+import co.vendistax.splatcast.logging.Logger
+import co.vendistax.splatcast.logging.LoggerFactory
 import co.vendistax.splatcast.models.CreateTransformerRequest
 import co.vendistax.splatcast.models.UpdateTransformerRequest
 import co.vendistax.splatcast.services.TransformerService
@@ -8,8 +10,11 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
-fun Route.transformerRoutes(transformerService: TransformerService) {
-    route("/apps/{appId}/topics/{topicId}/transforms") {
+fun Route.transformerRoutes(
+    transformerService: TransformerService,
+    logger: Logger = LoggerFactory.getLogger("transformerRoutes"),
+    ) {
+    route("/apps/{appId}/topics/{topicId}/transformers") {
 
         // POST /apps/{appId}/topics/{topicId}/transforms - Create transform
         post {

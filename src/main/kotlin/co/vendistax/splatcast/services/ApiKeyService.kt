@@ -2,6 +2,8 @@ package co.vendistax.splatcast.services
 
 import at.favre.lib.crypto.bcrypt.BCrypt
 import co.vendistax.splatcast.database.tables.ApiKeys
+import co.vendistax.splatcast.logging.Logger
+import co.vendistax.splatcast.logging.LoggerFactory
 import co.vendistax.splatcast.models.*
 import com.github.f4b6a3.ulid.UlidCreator
 import org.jetbrains.exposed.sql.*
@@ -10,7 +12,9 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.Instant
 import java.time.OffsetDateTime
 
-class ApiKeyService {
+class ApiKeyService(
+    private val logger: Logger = LoggerFactory.getLogger<ApiKeyService>(),
+) {
 
     fun create(appId: String, request: CreateApiKeyRequest): ApiKeyCreatedResponse = transaction {
         val keyId = "key_${UlidCreator.getUlid()}"

@@ -1,16 +1,19 @@
 package co.vendistax.splatcast.services
 
 import co.vendistax.splatcast.database.tables.Apps
+import co.vendistax.splatcast.logging.Logger
+import co.vendistax.splatcast.logging.LoggerFactory
 import co.vendistax.splatcast.models.App
 import co.vendistax.splatcast.models.CreateAppRequest
 import co.vendistax.splatcast.models.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
-import java.time.Instant
 import java.time.OffsetDateTime
 
-class AppService {
+class AppService(
+    private val logger: Logger = LoggerFactory.getLogger<AppService>(),
+) {
 
     fun findAll(): List<App> = transaction {
         Apps.selectAll().map { toApp(it) }

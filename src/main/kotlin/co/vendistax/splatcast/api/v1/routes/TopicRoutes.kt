@@ -1,5 +1,7 @@
 package co.vendistax.splatcast.api.v1.routes
 
+import co.vendistax.splatcast.logging.Logger
+import co.vendistax.splatcast.logging.LoggerFactory
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -8,7 +10,10 @@ import co.vendistax.splatcast.services.TopicService
 import co.vendistax.splatcast.models.*
 import co.vendistax.splatcast.validation.validateRequired
 
-fun Route.topicRoutes(topicService: TopicService) {
+fun Route.topicRoutes(
+    topicService: TopicService,
+    logger: Logger = LoggerFactory.getLogger("topicRoutes"),
+    ) {
     route("/api/apps/{appId}/topics") {
         get {
             val appId = call.parameters["appId"]?.validateRequired("appId")!!

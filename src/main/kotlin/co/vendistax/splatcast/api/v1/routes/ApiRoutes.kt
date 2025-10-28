@@ -1,5 +1,7 @@
 package co.vendistax.splatcast.api.v1.routes
 
+import co.vendistax.splatcast.logging.Logger
+import co.vendistax.splatcast.logging.LoggerFactory
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -7,7 +9,10 @@ import io.ktor.server.routing.*
 import co.vendistax.splatcast.services.ApiKeyService
 import co.vendistax.splatcast.models.*
 
-fun Route.apiKeyRoutes(apiKeyService: ApiKeyService) {
+fun Route.apiKeyRoutes(
+    apiKeyService: ApiKeyService,
+    logger: Logger = LoggerFactory.getLogger("apiKeyRoutes"),
+    ) {
     route("/api/apps/{appId}/keys") {
         get {
             val appId = call.parameters["appId"] ?: throw IllegalArgumentException("Missing appId")

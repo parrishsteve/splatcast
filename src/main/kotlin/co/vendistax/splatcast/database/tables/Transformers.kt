@@ -1,7 +1,7 @@
 package co.vendistax.splatcast.database.tables
 
+import co.vendistax.splatcast.database.PGEnum
 import org.jetbrains.exposed.dao.id.IdTable
-import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.javatime.timestampWithTimeZone
 import java.time.OffsetDateTime
 
@@ -20,7 +20,13 @@ object Transformers : IdTable<String>("js_transforms") {
     val topicId = varchar("topic_id", 255).references(Topics.id)
     val fromSchema = varchar("from_schema", 255).nullable()
     val toSchema = varchar("to_schema", 255)
-    val lang = enumeration<TransformLang>("lang").default(TransformLang.JS)
+
+    //val lang = enumeration<TransformLang>("lang").default(TransformLang.JS)
+    val lang = customEnumeration("lang", "transform_lang",
+        { value -> TransformLang.fromString(value as String) },
+        { PGEnum("transform_lang", it) }
+    ).default(TransformLang.JS)
+
     val code = text("code")
     val codeHash = varchar("code_hash", 255)
     val timeoutMs = integer("timeout_ms").default(50)

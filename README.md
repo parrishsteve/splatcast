@@ -102,3 +102,63 @@ curl -X POST http://localhost:8080/apps/app_123/topics/topic_456/schemas \
 curl -X GET http://localhost:8080/apps/app_123/topics/topic_456/schemas \
 -H "Accept: application/json"
 
+curl -i -X GET "http://localhost:8080/apps/app_1761081168689/topics/topic_09779bbc2690" -H "Accept: application/json"
+
+/*
+app_1761081168689
+topic_09779bbc2690
+
+curl -i -X POST "http://localhost:8080/apps/app_1761081168689/topics/topic_09779bbc2690/publish" \
+-H "Authorization: Bearer <TOKEN>" \
+-H "Content-Type: application/json" \
+-d '{
+"schemaVersion": "1.0",
+"data": {
+"userId": 123,
+"action": "signup",
+"metadata": { "source": "web" }
+}
+}'
+
+curl -i -X POST "http://localhost:8080/apps/app_1761081168689/topics/topic_09779bbc2690/transformers" \
+-H "Authorization: Bearer <TOKEN>" \
+-H "Content-Type: application/json" \
+-d '{
+"fromSchema": "1.0",
+"toSchema": "2.0",
+"code": "function transform(input) {
+const newValue = {
+steve: input.action,
+}
+return newValue;
+}",
+"timeoutMs": 5000,
+"enabled": true
+}'
+
+
+js_transforms (
+app_id, code, code_hash, created_at, enabled, from_schema, id, lang, timeout_ms, to_schema, topic_id) 
+
+VALUES
+(('app_1761081168689'),
+('function transform(input) { return input; }'),
+('2fb7cee54f1786b85f9785252e985efe593df773d216cc96f4285bf08219fe33'),
+('2025-10-25 12:26:07.909712-05'::timestamp with time zone),
+('TRUE'::boolean),
+('1.0'),
+('trf_1761413167908'),
+('0'::int4),
+('5000'::int4),
+('2.0'),
+('topic_09779bbc2690'))
+
+\nRETURNING * was aborted: ERROR: column \"lang\" is of type transform_lang but expression is of type integer\n
+
+
+
+test
+test
+72
+"1.0"
+*/

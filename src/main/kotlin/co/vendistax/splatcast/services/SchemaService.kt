@@ -5,10 +5,14 @@ import co.vendistax.splatcast.database.entities.SchemaEntity
 import co.vendistax.splatcast.database.entities.TopicEntity
 import co.vendistax.splatcast.database.tables.SchemaStatus
 import co.vendistax.splatcast.database.tables.Schemas
+import co.vendistax.splatcast.logging.Logger
+import co.vendistax.splatcast.logging.LoggerFactory
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 
-class SchemaService {
+class SchemaService(
+    private val logger: Logger = LoggerFactory.getLogger<SchemaService>(),
+) {
 
     fun createSchema(appId: String, topicId: String, request: CreateSchemaRequest): Result<SchemaResponse> = transaction {
         try {

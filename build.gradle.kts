@@ -20,6 +20,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
+    // Logging
+    implementation("io.github.microutils:kotlin-logging-jvm:3.0.5")
+    implementation("ch.qos.logback:logback-classic:1.4.14")
+
     // Exposed ORM for database
     implementation("org.jetbrains.exposed:exposed-core:0.45.0")
     implementation("org.jetbrains.exposed:exposed-dao:0.45.0")
@@ -33,6 +37,10 @@ dependencies {
     implementation("org.postgresql:postgresql:42.7.4")
     implementation("org.jooq:jooq:3.20.7")
 
+    // Need for JS transformations
+    implementation("org.graalvm.polyglot:polyglot:23.1.1")
+    implementation("org.graalvm.polyglot:js:23.1.1")
+
     // For password hashing
     implementation("at.favre.lib:bcrypt:0.10.2")
     implementation("com.github.f4b6a3:ulid-creator:5.0.0")
@@ -40,6 +48,9 @@ dependencies {
     // Metrics (optional)
     implementation("io.ktor:ktor-server-metrics-micrometer:$ktor")
     implementation("io.micrometer:micrometer-registry-prometheus:1.13.5")
+
+    // Kafka client
+    implementation("org.apache.kafka:kafka-clients:3.5.1")
 
     testImplementation(kotlin("test"))
 }

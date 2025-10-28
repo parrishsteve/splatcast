@@ -1,12 +1,16 @@
 package co.vendistax.splatcast.api.v1.routes
 
+import co.vendistax.splatcast.logging.Logger
+import co.vendistax.splatcast.logging.LoggerFactory
 import co.vendistax.splatcast.services.AuditService
 import io.ktor.http.*
-import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
-fun Route.auditRoutes(auditService: AuditService) {
+fun Route.auditRoutes(
+    auditService: AuditService,
+    logger: Logger = LoggerFactory.getLogger("auditRoutes"),
+    ) {
     route("/apps/{appId}/audit") {
 
         // GET /apps/{appId}/audit - Get all audit events for app

@@ -5,12 +5,16 @@ import co.vendistax.splatcast.database.entities.QuotaEntity
 import co.vendistax.splatcast.database.entities.TopicEntity
 import co.vendistax.splatcast.database.tables.Quotas
 import co.vendistax.splatcast.database.tables.Topics
+import co.vendistax.splatcast.logging.Logger
+import co.vendistax.splatcast.logging.LoggerFactory
 import org.jetbrains.exposed.sql.transactions.transaction
 import co.vendistax.splatcast.models.*
 import org.jetbrains.exposed.sql.and
 import java.time.format.DateTimeFormatter
 
-class TopicService {
+class TopicService(
+    private val logger: Logger = LoggerFactory.getLogger<TopicService>(),
+) {
 
     fun create(appId: String, request: CreateTopicRequest): TopicResponse = transaction {
         // Check if app exists

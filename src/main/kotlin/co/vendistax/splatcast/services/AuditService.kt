@@ -5,6 +5,8 @@ import co.vendistax.splatcast.models.AuditEventsListResponse
 import co.vendistax.splatcast.models.CreateAuditEventRequest
 import co.vendistax.splatcast.database.entities.AuditEventEntity
 import co.vendistax.splatcast.database.tables.AuditEvents
+import co.vendistax.splatcast.logging.Logger
+import co.vendistax.splatcast.logging.LoggerFactory
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
@@ -21,7 +23,9 @@ interface AuditReader {
     fun getEventsByAction(appId: String, action: String, page: Int = 1, pageSize: Int = 50): AuditEventsListResponse
 }
 
-class AuditService : AuditWriter, AuditReader {
+class AuditService(
+    private val logger: Logger = LoggerFactory.getLogger<AuditService>(),
+) : AuditWriter, AuditReader {
 
     override fun recordEvent(appId: String, request: CreateAuditEventRequest): String = transaction {
         val eventId = "audit_${System.currentTimeMillis()}"
