@@ -1,6 +1,7 @@
-package co.vendistax.splatcast.websocket
+package co.vendistax.splatcast.session
 
-import co.vendistax.splatcast.queue.implementation.KafkaQueueBus
+import co.vendistax.splatcast.queue.QueueChannel
+import co.vendistax.splatcast.queue.implementation.KafkaQueueConsumer
 import co.vendistax.splatcast.services.TransformerService
 import io.ktor.server.websocket.DefaultWebSocketServerSession
 
@@ -12,13 +13,13 @@ class SubscriberSessionFactory(
         topicId: String,
         transformerId: String,
         serverSession: DefaultWebSocketServerSession,
-    ): SubscriberSession {
-        val queueBus = KafkaQueueBus()
-        return SubscriberSession(
+    ): SubscriberSessionInterface {
+        val queueBusConsumer = KafkaQueueConsumer(channel = QueueChannel(appId, topicId))
+        return SubscriberBridgeSession(
             appId = appId,
             topicId = topicId,
             transformerId = transformerId,
-            queueBus = queueBus,
+            queueBusConsumer = queueBusConsumer,
             serverSession = serverSession,
             transformerService = transformerService,
         )

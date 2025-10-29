@@ -1,6 +1,6 @@
 package co.vendistax.splatcast.services
 
-import co.vendistax.splatcast.websocket.TopicWebSocketHub
+import co.vendistax.splatcast.session.SubscriberSessionHub
 
 data class ServiceDependencies(
     val appService: AppService,
@@ -10,5 +10,5 @@ data class ServiceDependencies(
     val schemaService: SchemaService,
     val transformerService: TransformerService,
     val publishingService: PublishingService,
-    val topicWebSocketHub: TopicWebSocketHub,
+    val subscriberSessionHub: SubscriberSessionHub,
 )

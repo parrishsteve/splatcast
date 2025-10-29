@@ -108,6 +108,8 @@ curl -i -X GET "http://localhost:8080/apps/app_1761081168689/topics/topic_09779b
 app_1761081168689
 topic_09779bbc2690
 
+wscat -c ws://localhost:8080/apps/app_1761081168689/topics/topic_09779bbc2690/subscribe 
+
 curl -i -X POST "http://localhost:8080/apps/app_1761081168689/topics/topic_09779bbc2690/publish" \
 -H "Authorization: Bearer <TOKEN>" \
 -H "Content-Type: application/json" \

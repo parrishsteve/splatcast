@@ -1,8 +1,8 @@
-package co.vendistax.splatcast.websocket
+package co.vendistax.splatcast.session
 
 import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
-import co.vendistax.splatcast.queue.QueueBus
+import co.vendistax.splatcast.queue.QueueBusConsumer
 import co.vendistax.splatcast.services.TransformerService
 import io.ktor.server.websocket.DefaultWebSocketServerSession
 import io.ktor.websocket.CloseReason
@@ -15,22 +15,23 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 
-class SubscriberSession(
+class SubscriberBridgeSession(
     private val appId: String,
     private val topicId: String,
     private val transformerId: String?,
-    private val queueBus: QueueBus,
-    val serverSession: DefaultWebSocketServerSession,
+    private val queueBusConsumer: QueueBusConsumer,
+    private val serverSession: DefaultWebSocketServerSession,
     private val transformerService: TransformerService,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
-    private val logger: Logger = LoggerFactory.getLogger<SubscriberSession>(),
-) {
-    fun start() {
+    private val logger: Logger = LoggerFactory.getLogger<SubscriberBridgeSession>(),
+): SubscriberSessionInterface {
+
+    override fun start() {
         logger.info { "Starting subscriber session for appId=$appId, topicId=$topicId, transformerId=$transformerId" }
-        queueBus.subscribe(appId, topicId) { aId, tId, message ->
-            logger.info { "Received Kafka event for appId=$aId, topicId=$tId, message=$message" }
+        queueBusConsumer.start { channel, message ->
+            logger.info { "Received Kafka event for channel=$channel, message=$message" }
             scope.launch {
-                logger.info { "Now processing Kafka event for appId=$aId, topicId=$tId, message=$message" }
+                logger.info { "Now processing Kafka event for channel=$channel, message=$message" }
                 try {
                     // If there's a transformerId, use it to transform the message
                     if (!transformerId.isNullOrEmpty()) {
@@ -41,17 +42,17 @@ class SubscriberSession(
                         publish(message)
                     }
                 } catch (ex: Throwable) {
-                    logger.error(ex) { "Error processing message for appId=$aId, topicId=$tId" }
+                    logger.error(ex) { "Error processing message for channel=$channel" }
                 }
             }
         }
     }
 
-    fun stop() {
+    override fun stop() {
         logger.info { "Stopping subscriber session for appId=$appId, topicId=$topicId, transformerId=$transformerId" }
         scope.launch {
             try {
-                queueBus.close()
+                queueBusConsumer.stop()
                 serverSession.close(reason = CloseReason(code = 5000, message = "Session closed"))
             } catch (ex: Throwable) {
                 logger.error(ex) { "Error closing subscriber session for appId=$appId, topicId=$topicId" }

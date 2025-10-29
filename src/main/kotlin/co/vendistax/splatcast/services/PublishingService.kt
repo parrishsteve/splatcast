@@ -10,7 +10,8 @@ import co.vendistax.splatcast.models.BatchPublishResponse
 import co.vendistax.splatcast.models.PublishEventRequest
 import co.vendistax.splatcast.models.PublishEventResponse
 import co.vendistax.splatcast.models.PublishFailure
-import co.vendistax.splatcast.queue.QueueBus
+import co.vendistax.splatcast.queue.QueueBusProducer
+import co.vendistax.splatcast.queue.QueueChannel
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.OffsetDateTime
@@ -18,7 +19,7 @@ import java.util.*
 
 class PublishingService(
     private val transformerService: TransformerService,
-    private val queueBus: QueueBus,
+    private val queueBusProducer: QueueBusProducer,
     private val logger: Logger = LoggerFactory.getLogger<PublishingService>(),
 ) {
 
@@ -84,7 +85,7 @@ class PublishingService(
 
         // Publish to queue (I/O operation outside transaction)
         val jsonEventData = eventData.toString()
-        queueBus.publish(appId, topicId, jsonEventData)
+        queueBusProducer.send(QueueChannel(appId, topicId), jsonEventData)
 
         val response = PublishEventResponse(
             eventId = eventId,

@@ -23,6 +23,6 @@ fun Application.configureRoutes(
         schemaRoutes(serviceDependencies.schemaService)
         transformerRoutes(serviceDependencies.transformerService)
         eventPublishingRoutes(serviceDependencies.publishingService)
-        webSocketRoutes(serviceDependencies.topicWebSocketHub)
+        webSocketRoutes(serviceDependencies.subscriberSessionHub)
     }
 }

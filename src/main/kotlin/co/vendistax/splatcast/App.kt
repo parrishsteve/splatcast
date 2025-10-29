@@ -1,12 +1,11 @@
 package co.vendistax.splatcast
 
 import co.vendistax.splatcast.plugins.configureDatabase
-import co.vendistax.splatcast.plugins.configureQueueBus
 import co.vendistax.splatcast.plugins.configureRoutes
 import co.vendistax.splatcast.plugins.configureSerialization
 import co.vendistax.splatcast.plugins.configureStatusPages
 import co.vendistax.splatcast.plugins.configureWebsockets
-import co.vendistax.splatcast.queue.implementation.KafkaQueueBus
+import co.vendistax.splatcast.queue.implementation.KafkaQueueProducer
 import co.vendistax.splatcast.services.ApiKeyService
 import co.vendistax.splatcast.services.AppService
 import co.vendistax.splatcast.services.AuditService
@@ -16,8 +15,8 @@ import co.vendistax.splatcast.services.SchemaService
 import co.vendistax.splatcast.services.ServiceDependencies
 import co.vendistax.splatcast.services.TopicService
 import co.vendistax.splatcast.services.TransformerService
-import co.vendistax.splatcast.websocket.SubscriberSessionFactory
-import co.vendistax.splatcast.websocket.TopicWebSocketHub
+import co.vendistax.splatcast.session.SubscriberSessionFactory
+import co.vendistax.splatcast.session.SubscriberSessionHub
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
@@ -33,7 +32,8 @@ fun Application.serviceModule(): ServiceDependencies  {
     val jsRuntime = JavaScriptRuntimeService()
     val transformerService = TransformerService(jsRuntime)
     val subscriberSessionFactory = SubscriberSessionFactory(transformerService)
-    val topicWebSocketHub = TopicWebSocketHub(subscriberSessionFactory = subscriberSessionFactory)
+    val subscriberSessionHub = SubscriberSessionHub(subscriberSessionFactory = subscriberSessionFactory)
+    val queueProducer = KafkaQueueProducer()
 
     return ServiceDependencies (
         appService = AppService(),
@@ -42,8 +42,8 @@ fun Application.serviceModule(): ServiceDependencies  {
         auditService = AuditService(),
         schemaService = SchemaService(),
         transformerService = transformerService,
-        publishingService = PublishingService(transformerService = transformerService, queueBus = KafkaQueueBus()),
-        topicWebSocketHub = topicWebSocketHub,
+        publishingService = PublishingService(transformerService = transformerService, queueBusProducer = queueProducer),
+        subscriberSessionHub = subscriberSessionHub,
     )
 }
 
