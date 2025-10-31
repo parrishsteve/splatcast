@@ -20,12 +20,12 @@ enum class ApiKeyRole {
 @Serializable
 data class CreateApiKeyRequest(
     val role: ApiKeyRole,
-    val label: String? = null
+    val label: String
 )
 
 @Serializable
 data class ApiKeyCreatedResponse(
-    val id: String,
+    val id: Long,
     val plainKey: String,  // Only returned on creation
     val role: ApiKeyRole,
     val label: String?,
@@ -35,8 +35,8 @@ data class ApiKeyCreatedResponse(
 
 @Serializable
 data class ApiKeyResponse(
-    val id: String,
-    val appId: String,
+    val id: Long,
+    val appId: Long,
     val role: ApiKeyRole,
     val label: String?,
     @Serializable(with = InstantSerializer::class)

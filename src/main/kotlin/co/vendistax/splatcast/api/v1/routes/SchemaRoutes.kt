@@ -4,7 +4,8 @@ import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
 import co.vendistax.splatcast.models.CreateSchemaRequest
 import co.vendistax.splatcast.models.UpdateSchemaRequest
-import co.vendistax.splatcast.services.SchemaService
+import co.vendistax.splatcast.services.*
+import co.vendistax.splatcast.validation.validateRequired
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -13,76 +14,113 @@ import io.ktor.server.routing.*
 fun Route.schemaRoutes(
     schemaService: SchemaService,
     logger: Logger = LoggerFactory.getLogger("schemaRoutes"),
-){
-    route("/apps/{appId}/topics/{topicId}/schemas") {
+) {
+    route("/apps/{appId}/schemas") {
 
-        // POST /apps/{appId}/topics/{topicId}/schemas - Create schema
         post {
-            val appId = call.parameters["appId"] ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing appId")
-            val topicId = call.parameters["topicId"] ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing topicId")
+            val appId = call.parameters["appId"].validateRequired("appId").toLong()
 
-            val request = call.receive<CreateSchemaRequest>()
-
-            schemaService.createSchema(appId, topicId, request)
-                .onSuccess { schema -> call.respond(HttpStatusCode.Created, schema) }
-                .onFailure { error ->
-                    when {
-                        error.message?.contains("already exists") == true ->
-                            call.respond(HttpStatusCode.Conflict, mapOf("error" to error.message))
-                        error.message?.contains("not found") == true ->
-                            call.respond(HttpStatusCode.NotFound, mapOf("error" to error.message))
-                        else ->
-                            call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
-                    }
-                }
+            try {
+                val request = call.receive<CreateSchemaRequest>()
+                val schema = schemaService.createSchema(appId, request)
+                call.respond(HttpStatusCode.Created, schema)
+            } catch (e: InvalidSchemaException) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
+            } catch (e: Exception) {
+                logger.error(e, "Failed to create schema for appId=$appId")
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+            }
         }
 
-        // GET /apps/{appId}/topics/{topicId}/schemas - Get all schemas for topic
         get {
-            val appId = call.parameters["appId"] ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing appId")
-            val topicId = call.parameters["topicId"] ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing topicId")
+            val appId = call.parameters["appId"].validateRequired("appId").toLong()
 
-            schemaService.getSchemas(appId, topicId)
-                .onSuccess { schemas -> call.respond(HttpStatusCode.OK, schemas) }
-                .onFailure { call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error")) }
+            try {
+                val status = call.request.queryParameters["status"]?.let {
+                    co.vendistax.splatcast.database.tables.SchemaStatus.fromString(it)
+                }
+                val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 100
+                val offset = call.request.queryParameters["offset"]?.toIntOrNull() ?: 0
+
+                val schemas = schemaService.getSchemas(appId, status, limit, offset)
+                call.respond(HttpStatusCode.OK, schemas)
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
+            } catch (e: Exception) {
+                logger.error(e, "Failed to retrieve schemas for appId=$appId")
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+            }
         }
 
-        // GET /apps/{appId}/topics/{topicId}/schemas/{schemaId} - Get specific schema
         get("/{schemaId}") {
-            val appId = call.parameters["appId"] ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing appId")
-            val topicId = call.parameters["topicId"] ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing topicId")
-            val schemaId = call.parameters["schemaId"] ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing schemaId")
+            val appId = call.parameters["appId"].validateRequired("appId").toLong()
+            val schemaId = call.parameters["schemaId"].validateRequired("schemaId").toLong()
 
-            schemaService.getSchema(appId, topicId, schemaId)
-                .onSuccess { schema -> call.respond(HttpStatusCode.OK, schema) }
-                .onFailure { error ->
-                    when {
-                        error.message?.contains("not found") == true ->
-                            call.respond(HttpStatusCode.NotFound, mapOf("error" to error.message))
-                        else ->
-                            call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
-                    }
-                }
+            try {
+                val schema = schemaService.getSchema(appId, schemaId)
+                call.respond(HttpStatusCode.OK, schema)
+            } catch (e: SchemaNotFoundException) {
+                call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
+            } catch (e: Exception) {
+                logger.error(e, "Failed to retrieve schema=$schemaId")
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+            }
         }
 
-        // PUT /apps/{appId}/topics/{topicId}/schemas/{schemaId} - Update schema status
+        get("/name/{name}") {
+            val appId = call.parameters["appId"].validateRequired("appId").toLong()
+            val name = call.parameters["name"].validateRequired("name")
+
+            try {
+                val schema = schemaService.getSchemaByName(appId, name)
+                call.respond(HttpStatusCode.OK, schema)
+            } catch (e: SchemaNotFoundException) {
+                call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
+            } catch (e: Exception) {
+                logger.error(e, "Failed to retrieve schema with name=$name")
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+            }
+        }
+
         put("/{schemaId}") {
-            val appId = call.parameters["appId"] ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing appId")
-            val topicId = call.parameters["topicId"] ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing topicId")
-            val schemaId = call.parameters["schemaId"] ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing schemaId")
+            val appId = call.parameters["appId"].validateRequired("appId").toLong()
+            val schemaId = call.parameters["schemaId"].validateRequired("schemaId").toLong()
 
-            val request = call.receive<UpdateSchemaRequest>()
+            try {
+                val request = call.receive<UpdateSchemaRequest>()
+                val schema = schemaService.updateSchema(appId, schemaId, request)
+                call.respond(HttpStatusCode.OK, schema)
+            } catch (e: SchemaNotFoundException) {
+                call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
+            } catch (e: SchemaStatusTransitionException) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
+            } catch (e: Exception) {
+                logger.error(e, "Failed to update schema=$schemaId")
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+            }
+        }
 
-            schemaService.updateSchema(appId, topicId, schemaId, request)
-                .onSuccess { schema -> call.respond(HttpStatusCode.OK, schema) }
-                .onFailure { error ->
-                    when {
-                        error.message?.contains("not found") == true ->
-                            call.respond(HttpStatusCode.NotFound, mapOf("error" to error.message))
-                        else ->
-                            call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
-                    }
-                }
+        delete("/{schemaId}") {
+            val appId = call.parameters["appId"].validateRequired("appId").toLong()
+            val schemaId = call.parameters["schemaId"].validateRequired("schemaId").toLong()
+
+            try {
+                schemaService.deleteSchema(appId, schemaId)
+                call.respond(HttpStatusCode.NoContent)
+            } catch (e: SchemaNotFoundException) {
+                call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
+            } catch (e: IllegalStateException) {
+                call.respond(HttpStatusCode.Conflict, mapOf("error" to e.message))
+            } catch (e: Exception) {
+                logger.error(e, "Failed to delete schema=$schemaId")
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+            }
         }
     }
 }
+
+

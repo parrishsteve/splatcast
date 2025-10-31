@@ -5,7 +5,7 @@ import java.time.Instant
 
 @Serializable
 data class App(
-    val appId: String,
+    val appId: Long,
     val name: String,
     @Serializable(with = InstantSerializer::class)
     val createdAt: Instant,

@@ -5,10 +5,9 @@ import kotlinx.serialization.json.JsonObject
 
 @Serializable
 data class SchemaResponse(
-    val id: String,
-    val appId: String,
-    val topicId: String,
-    val version: String,
+    val id: Long,
+    val appId: Long,
+    val name: String,
     val jsonSchema: JsonObject,
     val status: String,
     val createdAt: String
@@ -16,7 +15,7 @@ data class SchemaResponse(
 
 @Serializable
 data class CreateSchemaRequest(
-    val version: String,
+    val name: String,
     val jsonSchema: JsonObject,
     val status: String = "active"
 )

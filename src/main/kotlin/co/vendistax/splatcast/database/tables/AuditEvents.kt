@@ -1,17 +1,22 @@
 package co.vendistax.splatcast.database.tables
 
-import org.jetbrains.exposed.dao.id.IdTable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import org.jetbrains.exposed.dao.id.LongIdTable
 import org.jetbrains.exposed.sql.javatime.timestampWithTimeZone
+import org.jetbrains.exposed.sql.json.jsonb
 import java.time.OffsetDateTime
 
-object AuditEvents : IdTable<String>("audit_events") {
-    override val id = text("id").entityId()
-    val appId = text("app_id").references(Apps.id)
+object AuditEvents : LongIdTable("audit_events") {
+    val appId = reference("app_id", Apps)
     val actor = text("actor")
     val action = text("action")
     val target = text("target")
-    val details = text("details").nullable()
+    val details = jsonb<JsonObject>(
+        name = "details",
+        serialize = { it.toString() },
+        deserialize = { Json.parseToJsonElement(it).jsonObject }
+    )
     val at = timestampWithTimeZone("at").clientDefault { OffsetDateTime.now() }
-
-    override val primaryKey = PrimaryKey(id)
 }

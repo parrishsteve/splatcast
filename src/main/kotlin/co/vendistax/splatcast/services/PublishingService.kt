@@ -1,21 +1,26 @@
 package co.vendistax.splatcast.services
 
+import co.vendistax.splatcast.database.entities.SchemaEntity
 import co.vendistax.splatcast.database.entities.TopicEntity
 import co.vendistax.splatcast.database.entities.TransformerEntity
 import co.vendistax.splatcast.database.tables.Topics
 import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
-import co.vendistax.splatcast.models.BatchPublishRequest
-import co.vendistax.splatcast.models.BatchPublishResponse
-import co.vendistax.splatcast.models.PublishEventRequest
-import co.vendistax.splatcast.models.PublishEventResponse
-import co.vendistax.splatcast.models.PublishFailure
+import co.vendistax.splatcast.models.*
 import co.vendistax.splatcast.queue.QueueBusProducer
 import co.vendistax.splatcast.queue.QueueChannel
+import kotlinx.coroutines.*
+import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.OffsetDateTime
 import java.util.*
+
+class SchemaVersionRequiredException(message: String) : IllegalArgumentException(message)
+
+class SchemaMismatchException(message: String) : IllegalArgumentException(message)
+
+class QueuePublishException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
 
 class PublishingService(
     private val transformerService: TransformerService,
@@ -23,106 +28,201 @@ class PublishingService(
     private val logger: Logger = LoggerFactory.getLogger<PublishingService>(),
 ) {
 
-    fun publishEvent(appId: String, topicId: String, request: PublishEventRequest): Result<PublishEventResponse> {
-        // Perform database operations in transaction
-        val validationResult = transaction {
-            try {
-                val topic = TopicEntity.find {
-                    Topics.id eq topicId and (Topics.appId eq appId)
-                }.firstOrNull()
-                    ?: return@transaction Result.failure<ValidationData>(Exception("Topic not found"))
+    fun publishEvent(
+        appId: Long,
+        topicId: Long,
+        request: PublishEventRequest,
+        idempotencyKey: String? = null
+    ): PublishEventResponse {
+        // Validate request
+        val validation = validatePublishRequest(appId, topicId, request)
 
-                var targetSchema: String? = null
-                var transformer: TransformerEntity? = null
+        // Transform if needed
+        val transformResult = applyTransformation(validation, request.data)
 
-                if (request.transformToSchema != null && request.transformToSchema != request.schemaVersion) {
-                    val result = transformerService.getTransforms(appId = appId, topicId = topicId)
-                        .getOrNull()?.find { it.toSchema == request.transformToSchema && it.fromSchema == request.schemaVersion }
-
-                    if (result != null) {
-                        transformer = TransformerEntity.findById(result.id)
-                    }
-                    if (transformer == null) {
-                        return@transaction Result.failure(Exception("Requested transformer does not exist"))
-                    }
-                    targetSchema = request.transformToSchema
-                } else {
-                    targetSchema = request.schemaVersion
-                }
-
-                if (topic.defaultSchemaId != null && targetSchema != topic.defaultSchemaId) {
-                    return@transaction Result.failure(Exception("Invalid schema: topic expects ${topic.defaultSchemaId} but received $targetSchema"))
-                }
-
-                Result.success(ValidationData(topic, transformer, targetSchema))
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
-        }
-
-        if (validationResult.isFailure) {
-            return Result.failure(validationResult.exceptionOrNull()!!)
-        }
-
-        val validation = validationResult.getOrThrow()
-        val eventId = "evt_${UUID.randomUUID()}"
+        // Publish to queue
+        val eventId = idempotencyKey?.let { "evt_$it" } ?: "evt_${UUID.randomUUID()}"
         val publishedAt = OffsetDateTime.now()
-        var eventData = request.data
-        val transformsApplied = mutableListOf<String>()
 
-        // Apply transforms if needed
-        if (validation.transformer != null) {
-            val transformed = transformerService.executeTransform(
-                transformer = validation.transformer,
-                inputData = eventData
-            ).getOrElse { error ->
-                return Result.failure(Exception("Transform failed: ${error.message}"))
-            }
+        publishToQueue(
+            appId = appId,
+            topicId = topicId,
+            eventId = eventId,
+            data = transformResult.data
+        )
 
-            eventData = transformed.transformedData
-            transformsApplied.add(transformed.transformId)
+        logger.info {
+            "Published event: id=$eventId, topic=$topicId, transforms=${transformResult.transformsApplied}"
         }
 
-        // Publish to queue (I/O operation outside transaction)
-        val jsonEventData = eventData.toString()
-        queueBusProducer.send(QueueChannel(appId, topicId), jsonEventData)
-
-        val response = PublishEventResponse(
+        return PublishEventResponse(
             eventId = eventId,
             topicId = topicId,
             publishedAt = publishedAt.toString(),
-            transformsApplied = transformsApplied
+            transformsApplied = transformResult.transformsApplied
         )
-
-        return Result.success(response)
     }
 
-    fun batchPublish(appId: String, topicId: String, request: BatchPublishRequest): Result<BatchPublishResponse> {
-        try {
-            val published = mutableListOf<PublishEventResponse>()
-            val failed = mutableListOf<PublishFailure>()
-
-            request.events.forEachIndexed { index, eventRequest ->
-                publishEvent(appId, topicId, eventRequest)
-                    .onSuccess { response -> published.add(response) }
-                    .onFailure { error ->
-                        failed.add(PublishFailure(
-                            index = index,
-                            error = error.message ?: "Unknown error",
-                            data = eventRequest.data
-                        ))
+    suspend fun batchPublishAsync(
+        appId: Long,
+        topicId: Long,
+        request: BatchPublishRequest
+    ): BatchPublishResponse {
+        val results = coroutineScope {
+            request.events.mapIndexed { index, eventRequest ->
+                async {
+                    index to runCatching {
+                        publishEvent(
+                            appId = appId,
+                            topicId = topicId,
+                            request = eventRequest,
+                            idempotencyKey = eventRequest.idempotencyKey
+                        )
                     }
-            }
+                }
+            }.awaitAll()
+        }
 
-            return Result.success(BatchPublishResponse(published, failed))
+        val published = mutableListOf<PublishEventResponse>()
+        val failed = mutableListOf<PublishFailure>()
+
+        results.forEach { (index, result) ->
+            result
+                .onSuccess { published.add(it) }
+                .onFailure { error ->
+                    failed.add(PublishFailure(
+                        index = index,
+                        error = error.message ?: "Unknown error",
+                        data = request.events[index].data
+                    ))
+                }
+        }
+
+        logger.info {
+            "Batch published: app=$appId, topic=$topicId, success=${published.size}, failed=${failed.size}"
+        }
+
+        return BatchPublishResponse(published, failed)
+    }
+
+    // Synchronous wrapper for backward compatibility
+    fun batchPublish(appId: Long, topicId: Long, request: BatchPublishRequest): BatchPublishResponse {
+        return runBlocking {
+            batchPublishAsync(appId, topicId, request)
+        }
+    }
+
+    private fun validatePublishRequest(
+        appId: Long,
+        topicId: Long,
+        request: PublishEventRequest
+    ): ValidationData = transaction {
+        // Find topic
+        val topic = TopicEntity.find {
+            (Topics.id eq topicId) and (Topics.appId eq appId)
+        }.firstOrNull()
+            ?: throw TransformerNotFoundException("Topic not found: appId=$appId, topicId=$topicId")
+
+        // Validate schema version is provided when topic has default schema
+        if (topic.defaultSchemaId != null && request.schemaId <= 0L) {
+            throw SchemaVersionRequiredException(
+                "Schema version required for topic with default schema"
+            )
+        }
+
+        // Determine target schema and find transformer if needed
+        val targetSchemaId = request.transformToSchemaId ?: request.schemaId
+        var transformer: TransformerEntity? = null
+
+        if (request.schemaId > 0 &&
+            request.transformToSchemaId != null &&
+            request.transformToSchemaId != request.schemaId) {
+
+            transformer = findTransformer(
+                appId = appId,
+                topicId = topicId,
+                fromSchemaId = request.schemaId,
+                toSchemaId = request.transformToSchemaId
+            ) ?: throw TransformerNotFoundException(
+                "No transformer found: ${request.schemaId} -> ${request.transformToSchemaId}"
+            )
+        }
+
+        // Validate against topic's default schema if it exists
+        if (topic.defaultSchemaId != null) {
+            val defaultSchema = SchemaEntity.findById(topic.defaultSchemaId!!)
+            if (defaultSchema?.id?.value != targetSchemaId) {
+                throw SchemaMismatchException(
+                    "Schema mismatch: topic expects version ${defaultSchema?.id?.value}, got $targetSchemaId"
+                )
+            }
+        }
+
+        ValidationData(
+            topic = topic,
+            transformer = transformer,
+            targetSchemaId = targetSchemaId
+        )
+    }
+
+    private fun findTransformer(
+        appId: Long,
+        topicId: Long,
+        fromSchemaId: Long,
+        toSchemaId: Long
+    ): TransformerEntity? {
+        val transformerData = transformerService.getTransformers(
+            appId = appId,
+            topicId = topicId
+        ).find {
+            it.fromSchemaId == fromSchemaId && it.toSchemaId == toSchemaId
+        }
+
+        return transformerData?.let { TransformerEntity.findById(it.id) }
+    }
+
+    private fun applyTransformation(
+        validation: ValidationData,
+        data: JsonObject
+    ): TransformResult {
+        return if (validation.transformer != null) {
+            val transformed = transformerService.executeTransform(
+                transformer = validation.transformer,
+                inputData = data
+            )
+            TransformResult(
+                data = transformed.transformedData,
+                transformsApplied = listOf(transformed.transformerId.toString())
+            )
+        } else {
+            TransformResult(data = data, transformsApplied = emptyList())
+        }
+    }
+
+    private fun publishToQueue(
+        appId: Long,
+        topicId: Long,
+        eventId: String,
+        data: Any
+    ) {
+        try {
+            val jsonData = data.toString()
+            queueBusProducer.send(QueueChannel(appId.toString(), topicId.toString()), jsonData)
+            logger.debug { "Published event $eventId to queue: app=$appId, topic=$topicId" }
         } catch (e: Exception) {
-            return Result.failure(e)
+            throw QueuePublishException("Failed to publish to queue: ${e.message}", e)
         }
     }
 
     private data class ValidationData(
         val topic: TopicEntity,
         val transformer: TransformerEntity?,
-        val targetSchema: String
+        val targetSchemaId: Long
+    )
+
+    private data class TransformResult(
+        val data: Any,
+        val transformsApplied: List<String>
     )
 }
+

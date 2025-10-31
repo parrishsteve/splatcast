@@ -4,7 +4,8 @@ import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
 import co.vendistax.splatcast.models.CreateTransformerRequest
 import co.vendistax.splatcast.models.UpdateTransformerRequest
-import co.vendistax.splatcast.services.TransformerService
+import co.vendistax.splatcast.services.*
+import co.vendistax.splatcast.validation.validateRequired
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -13,94 +14,97 @@ import io.ktor.server.routing.*
 fun Route.transformerRoutes(
     transformerService: TransformerService,
     logger: Logger = LoggerFactory.getLogger("transformerRoutes"),
-    ) {
+) {
     route("/apps/{appId}/topics/{topicId}/transformers") {
 
-        // POST /apps/{appId}/topics/{topicId}/transforms - Create transform
         post {
-            val appId = call.parameters["appId"] ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing appId")
-            val topicId = call.parameters["topicId"] ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing topicId")
+            val appId = call.parameters["appId"].validateRequired("appId").toLong()
+            val topicId = call.parameters["topicId"].validateRequired("topicId").toLong()
 
-            val request = call.receive<CreateTransformerRequest>()
-
-            transformerService.createTransform(appId, topicId, request)
-                .onSuccess { transform -> call.respond(HttpStatusCode.Created, transform) }
-                .onFailure { error ->
-                    when {
-                        error.message?.contains("already exists") == true ->
-                            call.respond(HttpStatusCode.Conflict, mapOf("error" to error.message))
-                        error.message?.contains("not found") == true ->
-                            call.respond(HttpStatusCode.NotFound, mapOf("error" to error.message))
-                        else ->
-                            call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
-                    }
-                }
+            try {
+                val request = call.receive<CreateTransformerRequest>()
+                val transformer = transformerService.createTransform(appId, topicId, request)
+                call.respond(HttpStatusCode.Created, transformer)
+            } catch (e: TransformerNotFoundException) {
+                call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
+            } catch (e: InvalidTransformCodeException) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
+            } catch (e: DuplicateTransformerException) {
+                call.respond(HttpStatusCode.Conflict, mapOf("error" to e.message))
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
+            } catch (e: Exception) {
+                logger.error(e, "Failed to create transformer: app=$appId, topic=$topicId")
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+            }
         }
 
-        // GET /apps/{appId}/topics/{topicId}/transforms - Get all transforms for topic
         get {
-            val appId = call.parameters["appId"] ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing appId")
-            val topicId = call.parameters["topicId"] ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing topicId")
+            val appId = call.parameters["appId"].validateRequired("appId").toLong()
+            val topicId = call.parameters["topicId"].validateRequired("topicId").toLong()
 
-            transformerService.getTransforms(appId, topicId)
-                .onSuccess { transforms -> call.respond(HttpStatusCode.OK, transforms) }
-                .onFailure { call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error")) }
+            try {
+                val transformers = transformerService.getTransformers(appId, topicId)
+                call.respond(HttpStatusCode.OK, transformers)
+            } catch (e: Exception) {
+                logger.error(e, "Failed to retrieve transformers: app=$appId, topic=$topicId")
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+            }
         }
 
-        // GET /apps/{appId}/topics/{topicId}/transforms/{transformId} - Get specific transform
         get("/{transformId}") {
-            val appId = call.parameters["appId"] ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing appId")
-            val topicId = call.parameters["topicId"] ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing topicId")
-            val transformId = call.parameters["transformId"] ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing transformId")
+            val appId = call.parameters["appId"].validateRequired("appId").toLong()
+            val topicId = call.parameters["topicId"].validateRequired("topicId").toLong()
+            val transformId = call.parameters["transformId"].validateRequired("transformId").toLong()
 
-            transformerService.getTransform(appId, topicId, transformId)
-                .onSuccess { transform -> call.respond(HttpStatusCode.OK, transform) }
-                .onFailure { error ->
-                    when {
-                        error.message?.contains("not found") == true ->
-                            call.respond(HttpStatusCode.NotFound, mapOf("error" to error.message))
-                        else ->
-                            call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
-                    }
-                }
+            try {
+                val transformer = transformerService.getTransformer(appId, topicId, transformId)
+                call.respond(HttpStatusCode.OK, transformer)
+            } catch (e: TransformerNotFoundException) {
+                call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
+            } catch (e: Exception) {
+                logger.error(e, "Failed to retrieve transformer=$transformId")
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+            }
         }
 
-        // PUT /apps/{appId}/topics/{topicId}/transforms/{transformId} - Update transform
         put("/{transformId}") {
-            val appId = call.parameters["appId"] ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing appId")
-            val topicId = call.parameters["topicId"] ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing topicId")
-            val transformId = call.parameters["transformId"] ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing transformId")
+            val appId = call.parameters["appId"].validateRequired("appId").toLong()
+            val topicId = call.parameters["topicId"].validateRequired("topicId").toLong()
+            val transformId = call.parameters["transformId"].validateRequired("transformId").toLong()
 
-            val request = call.receive<UpdateTransformerRequest>()
-
-            transformerService.updateTransform(appId, topicId, transformId, request)
-                .onSuccess { transform -> call.respond(HttpStatusCode.OK, transform) }
-                .onFailure { error ->
-                    when {
-                        error.message?.contains("not found") == true ->
-                            call.respond(HttpStatusCode.NotFound, mapOf("error" to error.message))
-                        else ->
-                            call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
-                    }
-                }
+            try {
+                val request = call.receive<UpdateTransformerRequest>()
+                val transformer = transformerService.updateTransform(appId, topicId, transformId, request)
+                call.respond(HttpStatusCode.OK, transformer)
+            } catch (e: TransformerNotFoundException) {
+                call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
+            } catch (e: InvalidTransformCodeException) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
+            } catch (e: Exception) {
+                logger.error(e, "Failed to update transformer=$transformId")
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+            }
         }
 
-        // DELETE /apps/{appId}/topics/{topicId}/transforms/{transformId} - Delete transform
         delete("/{transformId}") {
-            val appId = call.parameters["appId"] ?: return@delete call.respond(HttpStatusCode.BadRequest, "Missing appId")
-            val topicId = call.parameters["topicId"] ?: return@delete call.respond(HttpStatusCode.BadRequest, "Missing topicId")
-            val transformId = call.parameters["transformId"] ?: return@delete call.respond(HttpStatusCode.BadRequest, "Missing transformId")
+            val appId = call.parameters["appId"].validateRequired("appId").toLong()
+            val topicId = call.parameters["topicId"].validateRequired("topicId").toLong()
+            val transformId = call.parameters["transformId"].validateRequired("transformId").toLong()
 
-            transformerService.deleteTransform(appId, topicId, transformId)
-                .onSuccess { call.respond(HttpStatusCode.NoContent) }
-                .onFailure { error ->
-                    when {
-                        error.message?.contains("not found") == true ->
-                            call.respond(HttpStatusCode.NotFound, mapOf("error" to error.message))
-                        else ->
-                            call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
-                    }
-                }
+            try {
+                transformerService.deleteTransform(appId, topicId, transformId)
+                call.respond(HttpStatusCode.NoContent)
+            } catch (e: TransformerNotFoundException) {
+                call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
+            } catch (e: Exception) {
+                logger.error(e, "Failed to delete transformer=$transformId")
+                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+            }
         }
     }
 }
+
+

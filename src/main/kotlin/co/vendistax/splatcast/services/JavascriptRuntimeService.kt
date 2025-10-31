@@ -11,107 +11,187 @@ import org.graalvm.polyglot.Engine
 import org.graalvm.polyglot.EnvironmentAccess
 import org.graalvm.polyglot.HostAccess
 import org.graalvm.polyglot.ResourceLimits
+import org.graalvm.polyglot.PolyglotException
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicInteger
 
 class JavaScriptRuntimeService(
     private val logger: Logger = LoggerFactory.getLogger<JavaScriptRuntimeService>(),
 ) {
-
     private val engine = Engine.newBuilder("js")
         .option("engine.WarnInterpreterOnly", "false")
         .build()
+
+    // Create a single shared resource limits instance
+    private val resourceLimits = ResourceLimits.newBuilder()
+        .statementLimit(JavaScriptRuntimeService.Companion.MAX_STATEMENT_LIMIT) { limits ->
+            logger.warn { "Transform exceeded statement limit of ${JavaScriptRuntimeService.Companion.MAX_STATEMENT_LIMIT}" }
+            false
+        }
+        .build()
+
+    private val executorService = Executors.newCachedThreadPool { runnable ->
+        Thread(runnable, "js-runtime-${threadCounter.incrementAndGet()}").apply {
+            isDaemon = true
+        }
+    }
+
+    companion object {
+        private const val MAX_STATEMENT_LIMIT = 100_000L
+        private const val MAX_OUTPUT_SIZE_BYTES = 1_048_576 // 1MB
+        private val threadCounter = AtomicInteger(0)
+    }
 
     fun executeTransform(
         jsCode: String,
         inputData: JsonObject,
         timeoutMs: Int = 50
     ): Result<JsonObject> {
-        return try {
-            val context = createSecureContext(timeoutMs)
+        val startTime = System.currentTimeMillis()
 
+        return try {
+            val future = executorService.submit<Result<JsonObject>> {
+                executeInContext(jsCode, inputData, timeoutMs)
+            }
+
+            try {
+                val result = future.get(timeoutMs + 100L, TimeUnit.MILLISECONDS)
+
+                val executionTime = System.currentTimeMillis() - startTime
+                logger.debug { "Transform executed in ${executionTime}ms" }
+
+                result
+            } catch (e: TimeoutException) {
+                future.cancel(true)
+                logger.warn { "Transform timed out after ${timeoutMs}ms" }
+                Result.failure(Exception("Transform execution timed out after ${timeoutMs}ms"))
+            }
+        } catch (e: Exception) {
+            logger.error(e, "Transform execution failed")
+            Result.failure(Exception("Transform failed: ${sanitizeErrorMessage(e)}"))
+        }
+    }
+
+    private fun executeInContext(
+        jsCode: String,
+        inputData: JsonObject,
+        timeoutMs: Int
+    ): Result<JsonObject> {
+        val context = createSecureContext(timeoutMs)
+
+        return try {
             context.use { ctx ->
-                // Convert JsonObject to JSON string for JavaScript
+                // Convert JsonObject to JSON string
                 val inputJson = Json.encodeToString(inputData)
 
-                // Create the transform function wrapper
+                // Use a safer method to pass JSON data - via bindings instead of string interpolation
+                ctx.getBindings("js").putMember("__input", inputJson)
+
                 val wrappedCode = """
                     const transform = $jsCode;
-                    const input = JSON.parse('${inputJson.replace("'", "\\'")}');
+                    if (typeof transform !== 'function') {
+                        throw new Error('Transform must be a function');
+                    }
+                    const input = JSON.parse(__input);
                     const result = transform(input);
+                    if (typeof result !== 'object' || result === null) {
+                        throw new Error('Transform must return an object');
+                    }
                     JSON.stringify(result);
                 """.trimIndent()
 
-                // Execute the JavaScript code
                 val jsResult = ctx.eval("js", wrappedCode)
 
-                if (jsResult.isString) {
-                    val resultJson = jsResult.asString()
-                    val transformedData = Json.parseToJsonElement(resultJson).jsonObject
-                    Result.success(transformedData)
-                } else {
-                    Result.failure(Exception("Transform did not return a valid JSON object"))
+                if (!jsResult.isString) {
+                    return Result.failure(Exception("Transform did not return a valid result"))
                 }
+
+                val resultJson = jsResult.asString()
+
+                // Validate output size
+                if (resultJson.length > MAX_OUTPUT_SIZE_BYTES) {
+                    return Result.failure(
+                        Exception("Transform output exceeds maximum size of $MAX_OUTPUT_SIZE_BYTES bytes")
+                    )
+                }
+
+                val transformedData = Json.parseToJsonElement(resultJson).jsonObject
+                Result.success(transformedData)
+            }
+        } catch (e: PolyglotException) {
+            when {
+                e.isCancelled -> Result.failure(Exception("Transform execution was cancelled"))
+                e.isResourceExhausted -> Result.failure(Exception("Transform exceeded resource limits"))
+                e.isGuestException -> Result.failure(Exception("Transform error: ${e.message}"))
+                else -> Result.failure(Exception("JavaScript runtime error"))
             }
         } catch (e: Exception) {
-            when {
-                e.message?.contains("timeout") == true ->
-                    Result.failure(Exception("Transform execution timed out after ${timeoutMs}ms"))
-                e.message?.contains("polyglot") == true ->
-                    Result.failure(Exception("JavaScript execution error: ${e.message}"))
-                else ->
-                    Result.failure(Exception("Transform failed: ${e.message}"))
-            }
+            Result.failure(Exception("Transform failed: ${sanitizeErrorMessage(e)}"))
         }
     }
 
     fun validateTransformSyntax(jsCode: String): Result<Unit> {
         return try {
-            val context = createSecureContext(1000) // 1 second for validation
+            val context = createSecureContext(1000)
 
             context.use { ctx ->
-                // Just parse the function, don't execute
                 val testCode = """
                     const transform = $jsCode;
                     if (typeof transform !== 'function') {
-                        throw new Error('Code must export a function');
+                        throw new Error('Transform must be a function');
+                    }
+                    // Test with empty object
+                    const testResult = transform({});
+                    if (typeof testResult !== 'object' || testResult === null) {
+                        throw new Error('Transform must return an object');
                     }
                 """.trimIndent()
 
                 ctx.eval("js", testCode)
                 Result.success(Unit)
             }
+        } catch (e: PolyglotException) {
+            val errorMsg = when {
+                e.isGuestException -> "Invalid transform: ${e.message}"
+                e.isSyntaxError -> "Syntax error: ${e.message}"
+                else -> "Validation error: ${e.message}"
+            }
+            Result.failure(Exception(errorMsg))
         } catch (e: Exception) {
-            Result.failure(Exception("Invalid JavaScript syntax: ${e.message}"))
+            Result.failure(Exception("Validation failed: ${sanitizeErrorMessage(e)}"))
         }
     }
 
     private fun createSecureContext(timeoutMs: Int): Context {
         return Context.newBuilder("js")
             .engine(engine)
-            .allowHostAccess(HostAccess.NONE) // Disable access to host classes
-            .allowIO(false) // Disable file system access
-            .allowNativeAccess(false) // Disable native code access
-            .allowCreateThread(false) // Disable thread creation
-            .allowEnvironmentAccess(EnvironmentAccess.NONE) // Disable environment variables
-            .resourceLimits(
-                ResourceLimits.newBuilder()
-                    .statementLimit(10000, null) // Max 10k statements
-                    .build()
-            )
-            .option("js.ecmascript-version", "2022")
+            .allowHostAccess(HostAccess.NONE)
+            .allowIO(false)
+            .allowNativeAccess(false)
+            .allowCreateThread(false)
+            .allowEnvironmentAccess(EnvironmentAccess.NONE)
+            .allowPolyglotAccess(org.graalvm.polyglot.PolyglotAccess.NONE)
+            .resourceLimits(resourceLimits)  // Use the shared instance
             .option("js.strict", "true")
-            .option("js.timer-resolution", "1") // 1ms timer resolution
             .build()
-            .also { ctx ->
-                // Set execution timeout
-                ctx.initialize("js")
-                Thread {
-                    Thread.sleep(timeoutMs.toLong())
-                    try {
-                        ctx.close(true) // Force close on timeout
-                    } catch (e: Exception) {
-                        // Context might already be closed
-                    }
-                }.start()
+    }
+
+    private fun sanitizeErrorMessage(e: Exception): String {
+        // Remove potentially sensitive stack traces and paths
+        return e.message?.take(200) ?: "Unknown error"
+    }
+
+    fun shutdown() {
+        try {
+            executorService.shutdown()
+            if (!executorService.awaitTermination(5, TimeUnit.SECONDS)) {
+                executorService.shutdownNow()
             }
+            engine.close()
+        } catch (e: Exception) {
+            logger.error(e, "Error shutting down JavaScript runtime")
+        }
     }
 }

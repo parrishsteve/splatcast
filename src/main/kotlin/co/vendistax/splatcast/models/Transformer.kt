@@ -5,11 +5,12 @@ import kotlinx.serialization.json.JsonObject
 
 @Serializable
 data class TransformerResponse(
-    val id: String,
-    val appId: String,
-    val topicId: String,
-    val fromSchema: String?,
-    val toSchema: String,
+    val id: Long,
+    val appId: Long,
+    val topicId: Long,
+    val name: String,
+    val fromSchemaId: Long?,
+    val toSchemaId: Long,
     val lang: String,
     val code: String,
     val codeHash: String,
@@ -21,8 +22,9 @@ data class TransformerResponse(
 
 @Serializable
 data class CreateTransformerRequest(
-    val fromSchema: String? = null, // NULL = any schema
-    val toSchema: String,
+    val name: String,
+    val fromSchemaId: Long? = null, // NULL = any schema
+    val toSchemaId: Long,
     val code: String,
     val timeoutMs: Int = 50,
     val enabled: Boolean = true,
@@ -31,8 +33,8 @@ data class CreateTransformerRequest(
 
 @Serializable
 data class UpdateTransformerRequest(
-    val fromSchema: String? = null, // NULL = any schema
-    val toSchema: String? = null,
+    val fromSchemaId: Long? = null, // NULL = any schema
+    val toSchemaId: Long? = null,
     val code: String? = null,
     val timeoutMs: Int? = null,
     val enabled: Boolean? = null

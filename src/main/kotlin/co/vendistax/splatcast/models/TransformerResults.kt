@@ -5,16 +5,16 @@ import kotlinx.serialization.json.JsonObject
 
 @Serializable
 data class TransformerExecutionResult(
-    val transformId: String,
-    val fromSchema: String?,
-    val toSchema: String,
+    val transformerId: Long,
+    val fromSchemaId: Long?,
+    val toSchemaId: Long,
     val originalData: JsonObject,
     val transformedData: JsonObject
 )
 
 @Serializable
 data class TransformerTestResult(
-    val transformId: String,
+    val transformerId: Long,
     val inputJson: JsonObject,
     val expectedJson: JsonObject,
     val actualJson: JsonObject?,

@@ -1,26 +1,31 @@
 package co.vendistax.splatcast.database.tables
 
 import co.vendistax.splatcast.database.PGEnum
-import org.jetbrains.exposed.dao.id.IdTable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import org.jetbrains.exposed.dao.id.LongIdTable
 import org.jetbrains.exposed.sql.javatime.timestampWithTimeZone
+import org.jetbrains.exposed.sql.json.jsonb
 import java.time.OffsetDateTime
 
-object Schemas : IdTable<String>("schemas") {
-    override val id = text("id").entityId()
-    val appId = text("app_id").references(Apps.id)
-    val topicId = text("topic_id").references(Topics.id)
-    val version = text("version")
-    val jsonSchema = text("json_schema")
+object Schemas : LongIdTable("schemas") {
+    val appId = reference("app_id", Apps)
+    val name = text("name")
+    val jsonSchema = jsonb<JsonObject>(
+        name = "json_schema",
+        serialize = { it.toString() },
+        deserialize = { Json.parseToJsonElement(it).jsonObject }
+    )
     val status = customEnumeration("status", "schema_status",
         { value -> SchemaStatus.fromString(value as String) },
         { PGEnum("schema_status", it) }
     ).default(SchemaStatus.ACTIVE)
     val createdAt = timestampWithTimeZone("created_at").clientDefault { OffsetDateTime.now() }
-
-    override val primaryKey = PrimaryKey(id)
+    val updatedAt = timestampWithTimeZone("updated_at").clientDefault { OffsetDateTime.now() }
 
     init {
-        uniqueIndex(appId, topicId, version)
+        uniqueIndex(appId, name)
     }
 }
 

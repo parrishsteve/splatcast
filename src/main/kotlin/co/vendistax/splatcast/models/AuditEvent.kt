@@ -5,7 +5,7 @@ import kotlinx.serialization.json.JsonObject
 
 @Serializable
 data class AuditEventResponse(
-    val id: String,
+    val id: Long,
     val actor: String,
     val action: String,
     val target: String,

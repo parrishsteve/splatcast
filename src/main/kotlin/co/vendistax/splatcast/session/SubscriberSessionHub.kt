@@ -1,9 +1,11 @@
 package co.vendistax.splatcast.session
 import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
+import co.vendistax.splatcast.services.TransformerNotFoundException
 import io.ktor.server.websocket.DefaultWebSocketServerSession
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.jvm.Throws
 
 class SubscriberSessionHub(
     private val subscriberSessionFactory: SubscriberSessionFactory,
@@ -11,10 +13,11 @@ class SubscriberSessionHub(
 ) {
     private val sessions = ConcurrentHashMap<String, SubscriberSessionInterface>()
 
+    @Throws (TransformerNotFoundException::class)
     fun add(appId: String, topicId: String, transformerId: String, session: DefaultWebSocketServerSession): String {
         val id = UUID.randomUUID().toString()
         val newSession = subscriberSessionFactory.sessionFactory(
-            appId = appId, topicId = topicId, transformerId = transformerId,
+            appId = appId.toLong(), topicId = topicId.toLong(), transformerId = transformerId.toLong(),
             serverSession = session)
         newSession.start()
         sessions[id] = newSession
