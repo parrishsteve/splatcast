@@ -12,8 +12,8 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.OffsetDateTime
 
-class AppNotFoundException(appId: Long) :
-    NoSuchElementException("App not found: $appId")
+class AppNotFoundException(appName: String = "", appId: Long? = null) :
+    NoSuchElementException("App not found: $appName${appId ?: ""}")
 
 class AppNameAlreadyExistsException(name: String) :
     IllegalArgumentException("App name already exists: $name")
@@ -37,14 +37,14 @@ class AppService(
         Apps.select { Apps.id eq appId }
             .singleOrNull()
             ?.let { toApp(it) }
-            ?: throw AppNotFoundException(appId)
+            ?: throw AppNotFoundException(appId = appId)
     }
 
     fun findByName(name: String): App = transaction {
         Apps.select { Apps.name eq name }
             .singleOrNull()
             ?.let { toApp(it) }
-            ?: throw NoSuchElementException("App not found: name=$name")
+            ?: throw AppNotFoundException(appName = name)
     }
 
     fun create(request: CreateAppRequest): App = transaction {
@@ -75,7 +75,7 @@ class AppService(
 
     fun update(appId: Long, request: UpdateAppRequest): App = transaction {
         val existingApp = Apps.select { Apps.id eq appId }.firstOrNull()
-            ?: throw AppNotFoundException(appId)
+            ?: throw AppNotFoundException(appId = appId)
 
         validateAppName(request.name)
 
@@ -106,7 +106,7 @@ class AppService(
 
     fun delete(appId: Long): Unit = transaction {
         val app = Apps.select { Apps.id eq appId }.firstOrNull()
-            ?: throw AppNotFoundException(appId)
+            ?: throw AppNotFoundException(appId = appId)
 
         val topicCount = Topics.select { Topics.appId eq appId }.count()
         if (topicCount > 0) {

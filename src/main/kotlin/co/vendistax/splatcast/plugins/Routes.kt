@@ -18,11 +18,19 @@ fun Application.configureRoutes(
     routing {
         appRoutes(serviceDependencies.appService)
         apiKeyRoutes(serviceDependencies.apiKeyService)
-        topicRoutes(serviceDependencies.topicService)
+        topicRoutes(
+            appService = serviceDependencies.appService,
+            topicService = serviceDependencies.topicService)
         auditRoutes(serviceDependencies.auditService)
-        schemaRoutes(serviceDependencies.schemaService)
-        transformerRoutes(serviceDependencies.transformerService)
-        eventPublishingRoutes(serviceDependencies.publishingService)
+        schemaRoutes(
+            appService = serviceDependencies.appService,
+            schemaService = serviceDependencies.schemaService)
+        transformerRoutes(
+            appService = serviceDependencies.appService,
+            transformerService = serviceDependencies.transformerService)
+        eventPublishingRoutes(
+            appService = serviceDependencies.appService,
+            eventPublishingService = serviceDependencies.publishingService)
         webSocketRoutes(serviceDependencies.subscriberSessionHub)
     }
 }

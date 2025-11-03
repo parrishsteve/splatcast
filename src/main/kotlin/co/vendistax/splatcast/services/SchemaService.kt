@@ -3,10 +3,8 @@ package co.vendistax.splatcast.services
 import co.vendistax.splatcast.database.entities.AppEntity
 import co.vendistax.splatcast.models.*
 import co.vendistax.splatcast.database.entities.SchemaEntity
-import co.vendistax.splatcast.database.entities.TopicEntity
 import co.vendistax.splatcast.database.tables.SchemaStatus
 import co.vendistax.splatcast.database.tables.Schemas
-import co.vendistax.splatcast.database.tables.Topics
 import co.vendistax.splatcast.database.tables.Apps
 import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory

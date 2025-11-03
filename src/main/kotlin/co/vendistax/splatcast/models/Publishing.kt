@@ -5,8 +5,10 @@ import kotlinx.serialization.json.JsonObject
 
 @Serializable
 data class PublishEventRequest(
-    val schemaId: Long,
+    val schemaId: Long? = null,
+    val schemaName: String? = null,
     val transformToSchemaId: Long? = null,
+    val transformToSchemaName: String? = null,
     val data: JsonObject,
     val idempotencyKey: String? = null
 )
@@ -15,6 +17,7 @@ data class PublishEventRequest(
 data class PublishEventResponse(
     val eventId: String,
     val topicId: Long,
+    val topicName: String,
     val publishedAt: String,
     val transformsApplied: List<String> = emptyList()
 )

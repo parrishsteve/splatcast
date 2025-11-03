@@ -3,7 +3,9 @@ package co.vendistax.splatcast.services
 import co.vendistax.splatcast.database.entities.SchemaEntity
 import co.vendistax.splatcast.database.entities.TopicEntity
 import co.vendistax.splatcast.database.entities.TransformerEntity
+import co.vendistax.splatcast.database.tables.Schemas
 import co.vendistax.splatcast.database.tables.Topics
+import co.vendistax.splatcast.database.tables.Transformers
 import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
 import co.vendistax.splatcast.models.*
@@ -11,6 +13,10 @@ import co.vendistax.splatcast.queue.QueueBusProducer
 import co.vendistax.splatcast.queue.QueueChannel
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.JsonObject
+import org.jetbrains.exposed.dao.id.EntityID
+import org.jetbrains.exposed.sql.Op
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.OffsetDateTime
@@ -23,6 +29,7 @@ class SchemaMismatchException(message: String) : IllegalArgumentException(messag
 class QueuePublishException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
 
 class PublishingService(
+    private val schemaValidationService: SchemaValidationService,
     private val transformerService: TransformerService,
     private val queueBusProducer: QueueBusProducer,
     private val logger: Logger = LoggerFactory.getLogger<PublishingService>(),
@@ -30,12 +37,43 @@ class PublishingService(
 
     fun publishEvent(
         appId: Long,
+        topicName: String,
+        request: PublishEventRequest,
+        idempotencyKey: String? = null
+    ): PublishEventResponse = publishEvent(
+        appId = appId,
+        where = {
+            (Topics.name eq topicName) and (Topics.appId eq appId)
+        },
+        request = request,
+        idempotencyKey = idempotencyKey
+    )
+
+    fun publishEvent(
+        appId: Long,
         topicId: Long,
         request: PublishEventRequest,
         idempotencyKey: String? = null
-    ): PublishEventResponse {
+    ): PublishEventResponse = publishEvent(
+        appId = appId,
+        where = {
+            (Topics.id eq topicId) and (Topics.appId eq appId)
+        },
+        request = request,
+        idempotencyKey = idempotencyKey
+    )
+
+    private fun publishEvent(
+        appId: Long,
+        where: () -> Op<Boolean>,
+        request: PublishEventRequest,
+        idempotencyKey: String? = null
+    ): PublishEventResponse = transaction {
         // Validate request
-        val validation = validatePublishRequest(appId, topicId, request)
+        val topic = TopicEntity.find { where() }.firstOrNull()
+            ?: throw TransformerNotFoundException("Topic not found for appId=$appId")
+
+        val validation = validatePublishRequest(topic, request)
 
         // Transform if needed
         val transformResult = applyTransformation(validation, request.data)
@@ -46,18 +84,19 @@ class PublishingService(
 
         publishToQueue(
             appId = appId,
-            topicId = topicId,
+            topicId = topic.id.value,
             eventId = eventId,
             data = transformResult.data
         )
 
         logger.info {
-            "Published event: id=$eventId, topic=$topicId, transforms=${transformResult.transformsApplied}"
+            "Published event: id=$eventId, topicId=${topic.id.value}, topicName:${topic.name}, transforms=${transformResult.transformsApplied}"
         }
 
-        return PublishEventResponse(
+        PublishEventResponse(
             eventId = eventId,
-            topicId = topicId,
+            topicId = topic.id.value,
+            topicName = topic.name,
             publishedAt = publishedAt.toString(),
             transformsApplied = transformResult.transformsApplied
         )
@@ -113,49 +152,37 @@ class PublishingService(
     }
 
     private fun validatePublishRequest(
-        appId: Long,
-        topicId: Long,
+        topic: TopicEntity,
         request: PublishEventRequest
     ): ValidationData = transaction {
         // Find topic
-        val topic = TopicEntity.find {
-            (Topics.id eq topicId) and (Topics.appId eq appId)
-        }.firstOrNull()
-            ?: throw TransformerNotFoundException("Topic not found: appId=$appId, topicId=$topicId")
+
+        require(request.schemaId != null || !request.schemaName.isNullOrEmpty()) {
+            "The documents Schema ID must be provided in publish request"
+        }
+
+        val (schemaId, toSchemaId) = schemaValidationService.getTransformerRequestSchemaInfo(topic.appId.value, request)
+        val targetSchemaId = toSchemaId ?: schemaId
 
         // Validate schema version is provided when topic has default schema
-        if (topic.defaultSchemaId != null && request.schemaId <= 0L) {
+        if (topic.defaultSchemaId != null && targetSchemaId != topic.defaultSchemaId?.value) {
             throw SchemaVersionRequiredException(
                 "Schema version required for topic with default schema"
             )
         }
 
         // Determine target schema and find transformer if needed
-        val targetSchemaId = request.transformToSchemaId ?: request.schemaId
         var transformer: TransformerEntity? = null
 
-        if (request.schemaId > 0 &&
-            request.transformToSchemaId != null &&
-            request.transformToSchemaId != request.schemaId) {
-
-            transformer = findTransformer(
-                appId = appId,
-                topicId = topicId,
-                fromSchemaId = request.schemaId,
-                toSchemaId = request.transformToSchemaId
+        if (toSchemaId != null) {
+            transformer = transformerService.findTransformerBySchemas(
+                appId = topic.appId.value,
+                topicId = topic.id.value,
+                fromSchemaId = schemaId,
+                toSchemaId = toSchemaId
             ) ?: throw TransformerNotFoundException(
                 "No transformer found: ${request.schemaId} -> ${request.transformToSchemaId}"
             )
-        }
-
-        // Validate against topic's default schema if it exists
-        if (topic.defaultSchemaId != null) {
-            val defaultSchema = SchemaEntity.findById(topic.defaultSchemaId!!)
-            if (defaultSchema?.id?.value != targetSchemaId) {
-                throw SchemaMismatchException(
-                    "Schema mismatch: topic expects version ${defaultSchema?.id?.value}, got $targetSchemaId"
-                )
-            }
         }
 
         ValidationData(
@@ -163,22 +190,6 @@ class PublishingService(
             transformer = transformer,
             targetSchemaId = targetSchemaId
         )
-    }
-
-    private fun findTransformer(
-        appId: Long,
-        topicId: Long,
-        fromSchemaId: Long,
-        toSchemaId: Long
-    ): TransformerEntity? {
-        val transformerData = transformerService.getTransformers(
-            appId = appId,
-            topicId = topicId
-        ).find {
-            it.fromSchemaId == fromSchemaId && it.toSchemaId == toSchemaId
-        }
-
-        return transformerData?.let { TransformerEntity.findById(it.id) }
     }
 
     private fun applyTransformation(

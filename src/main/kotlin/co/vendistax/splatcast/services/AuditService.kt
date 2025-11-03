@@ -158,7 +158,7 @@ class AuditService(
         }
 
         if (!appExists) {
-            throw AppNotFoundException(appId)
+            throw AppNotFoundException(appId = appId)
         }
     }
 

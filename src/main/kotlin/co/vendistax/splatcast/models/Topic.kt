@@ -9,6 +9,7 @@ data class CreateTopicRequest(
     val description: String? = null,
     val retentionHours: Int = 72,
     val defaultSchemaId: Long? = null,
+    val defaultSchemaName: String? = null,
     val quotas: QuotaSettings = QuotaSettings()
 ) {
     fun validate(): CreateTopicRequest {
@@ -45,9 +46,8 @@ data class QuotaSettings(
 
 @Serializable
 data class PatchTopicRequest(
-    //val name: String? = null,
-    //val description: String? = null,
-    val defaultSchemaId: Long? = null
+    val defaultSchemaId: Long? = null,
+    val defaultSchemaName: String? = null
 )
 
 @Serializable
@@ -58,6 +58,7 @@ data class TopicResponse(
     val description: String?,
     val retentionHours: Int,
     val defaultSchemaId: Long?,
+    val defaultSchemaName: String?,
     val quotas: QuotaSettings,
     val createdAt: String,
     val updatedAt: String
@@ -69,6 +70,7 @@ data class UpdateTopicRequest(
     val description: String? = null,
     val retentionHours: Int? = null,
     val defaultSchemaId: Long? = null,
+    val defaultSchemaName: String?,
     val quotas: QuotaSettings? = null
 ) {
     fun validate(): UpdateTopicRequest {

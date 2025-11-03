@@ -12,9 +12,21 @@ import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.dao.id.EntityID
+import org.jetbrains.exposed.sql.JoinType
+import org.jetbrains.exposed.sql.Op
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inSubQuery
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
+import org.jetbrains.exposed.sql.alias
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.security.MessageDigest
+import kotlin.Boolean
+import kotlin.and
+import kotlin.collections.get
+import kotlin.plus
+import kotlin.text.get
 
 class InvalidTransformCodeException(message: String) : IllegalArgumentException(message)
 
@@ -26,19 +38,40 @@ class TransformerNotFoundException(message: String) : NoSuchElementException(mes
 
 class TransformerService(
     private val jsRuntime: JavaScriptRuntimeService,
+    private val schemaValidationService: SchemaValidationService,
     private val logger: Logger = LoggerFactory.getLogger<TransformerService>(),
 ) {
+
+
+    fun createTransform(
+        appId: Long,
+        topicName: String,
+        request: CreateTransformerRequest
+    ): TransformerResponse =
+        createTransform(appId, where = {
+            (Topics.name eq topicName) and (Topics.appId eq appId)
+        }, request)
 
     fun createTransform(
         appId: Long,
         topicId: Long,
         request: CreateTransformerRequest
+    ): TransformerResponse =
+        createTransform(appId, where = {
+            (Topics.id eq topicId) and (Topics.appId eq appId)
+        }, request)
+
+    private fun createTransform(
+        appId: Long,
+        where: () -> org.jetbrains.exposed.sql.Op<Boolean>,
+        request: CreateTransformerRequest
     ): TransformerResponse = transaction {
         // Verify topic exists and belongs to app
-        TopicEntity.find {
-            (Topics.id eq topicId) and (Topics.appId eq appId)
-        }.firstOrNull()
-            ?: throw TransformerNotFoundException("Topic not found: appId=$appId, topicId=$topicId")
+        val topic = TopicEntity.find { where() }.firstOrNull()
+            ?: throw TransformerNotFoundException("Topic not found, check IDs provided")
+
+        // Convert and validate schema IDs from provided IDs or names
+        val schemaInfo = schemaValidationService.getTransformerRequestSchemaInfo(appId, request)
 
         // Validate JavaScript syntax before saving
         jsRuntime.validateTransformSyntax(request.code)
@@ -49,25 +82,25 @@ class TransformerService(
         val existingTransform = TransformerEntity.find {
             (Transformers.appId eq appId) and
                     (Transformers.name eq request.name) and
-                    (Transformers.topicId eq topicId) and
-                    (Transformers.fromSchemaId eq request.fromSchemaId) and
-                    (Transformers.toSchemaId eq request.toSchemaId) and
+                    (Transformers.topicId eq topic.id) and
+                    (Transformers.fromSchemaId eq schemaInfo.from?.id) and
+                    (Transformers.toSchemaId eq schemaInfo.to.id) and
                     (Transformers.codeHash eq codeHash) and
                     (Transformers.enabled eq true)
         }.firstOrNull()
 
         if (existingTransform != null) {
             throw DuplicateTransformerException(
-                "Active transform already exists: ${request.fromSchemaId} -> ${request.toSchemaId}"
+                "Active transform already exists: ${schemaInfo.from} -> ${schemaInfo.to}"
             )
         }
 
         val transform = TransformerEntity.new {
             this.appId = EntityID(appId, Apps)
-            this.topicId = EntityID(topicId, Topics)
+            this.topicId = EntityID(topic.id.value, Topics)
             this.name = request.name
-            this.fromSchemaId = request.fromSchemaId?.let { EntityID(it, Schemas) }
-            this.toSchemaId = EntityID(request.toSchemaId, Schemas)
+            this.fromSchemaId = schemaInfo.from?.let { EntityID(it.id, Schemas) }
+            this.toSchemaId = EntityID(schemaInfo.to.id, Schemas)
             this.lang = TransformLang.JS
             this.code = request.code
             this.codeHash = codeHash
@@ -80,17 +113,27 @@ class TransformerService(
             "Created transform: id=${transform.id.value}, ${request.fromSchemaId} -> ${request.toSchemaId}"
         }
 
-        transform.toResponse()
+        transform.toResponse(schemaInfo.from?.toString(), schemaInfo.to.name)
     }
 
-    fun executeTransform(
-        transformerId: Long,
-        inputData: JsonObject
-    ): TransformerExecutionResult = transaction {
-        val transformer = TransformerEntity.findById(transformerId)
-            ?: throw TransformerNotFoundException("Transform not found: id=$transformerId")
+    fun findTransformerBySchemas(
+        appId: Long,
+        topicId: Long,
+        fromSchemaId: Long?, // pass null when transformer.fromSchemaId should be NULL
+        toSchemaId: Long
+    ): TransformerEntity? = transaction {
+        var condition: Op<Boolean> =
+            (Transformers.appId eq appId) and
+                    (Transformers.topicId eq topicId) and
+                    (Transformers.toSchemaId eq EntityID(toSchemaId, Schemas))
 
-        executeTransform(transformer, inputData)
+        condition = if (fromSchemaId != null && fromSchemaId > 0L) {
+            condition and (Transformers.fromSchemaId eq EntityID(fromSchemaId, Schemas))
+        } else {
+            condition and Transformers.fromSchemaId.isNull()
+        }
+
+        TransformerEntity.find { condition }.firstOrNull()
     }
 
     fun executeTransform(
@@ -155,13 +198,59 @@ class TransformerService(
         )
     }
 
-    fun getTransformers(
+    /*fun getTransformersOrg(
         appId: Long,
         topicId: Long
     ): List<TransformerResponse> = transaction {
         TransformerEntity.find {
             (Transformers.appId eq appId) and (Transformers.topicId eq topicId)
-        }.map { it.toResponse() }
+        }.map {
+            val schemaInfo = schemaValidationService.getTransformerSchemaInfo(it)
+            it.toResponse(schemaInfo.from?.name, schemaInfo.to.name)
+        }
+    }*/
+
+    private fun getTransformers(
+        where: () -> org.jetbrains.exposed.sql.Op<Boolean>
+    ): List<TransformerResponse> = transaction {
+        val toSchema = Schemas.alias("toSchema")
+        val fromSchema = Schemas.alias("fromSchema")
+
+        Transformers
+            .join(Topics, JoinType.INNER, Transformers.topicId, Topics.id)
+            .join(toSchema, JoinType.INNER, Transformers.toSchemaId, toSchema[Schemas.id])
+            .join(fromSchema, JoinType.LEFT, Transformers.fromSchemaId, fromSchema[Schemas.id])
+            .slice(
+                Transformers.columns.toList() +
+                        Topics.columns.toList() +
+                        listOf(
+                            toSchema[Schemas.id],
+                            toSchema[Schemas.name],
+                            fromSchema[Schemas.id],
+                            fromSchema[Schemas.name]
+                        )
+            )
+            .select { where() }
+            .map { row ->
+                val transformer = TransformerEntity.wrapRow(row)
+                val fromSchemaName = row.getOrNull(fromSchema[Schemas.name])
+                val toSchemaName = row[toSchema[Schemas.name]]
+                transformer.toResponse(fromSchemaName, toSchemaName)
+            }
+    }
+
+    fun getTransformers(
+        appId: Long,
+        transformerName: String
+    ): List<TransformerResponse> = transaction {
+        getTransformers { (Transformers.appId eq appId) and (Transformers.name eq transformerName) }
+    }
+
+    fun getTransformers(
+        appId: Long,
+        transformerId: Long
+    ): List<TransformerResponse> = transaction {
+        getTransformers { (Transformers.appId eq appId) and (Transformers.id eq transformerId) }
     }
 
     fun getTransformerEntity(
@@ -175,37 +264,89 @@ class TransformerService(
         entity
     }
 
+    private fun getTransformer(
+        where: () -> org.jetbrains.exposed.sql.Op<Boolean>
+    ): TransformerResponse = transaction {
+        val toSchema = Schemas.alias("toSchema")
+        val fromSchema = Schemas.alias("fromSchema")
+
+        Transformers
+            .join(Topics, JoinType.INNER, Transformers.topicId, Topics.id)
+            .join(toSchema, JoinType.INNER, Transformers.toSchemaId, toSchema[Schemas.id])
+            .join(fromSchema, JoinType.LEFT, Transformers.fromSchemaId, fromSchema[Schemas.id])
+            .slice(
+                Transformers.columns.toList() +
+                        Topics.columns.toList() +
+                        listOf(
+                            toSchema[Schemas.id],
+                            toSchema[Schemas.name],
+                            fromSchema[Schemas.id],
+                            fromSchema[Schemas.name]
+                        )
+            )
+            .select { where() }
+            .map { row ->
+                val transformer = TransformerEntity.wrapRow(row)
+                val fromSchemaName = row.getOrNull(fromSchema[Schemas.name])
+                val toSchemaName = row[toSchema[Schemas.name]]
+                transformer.toResponse(fromSchemaName, toSchemaName)
+            }
+            .firstOrNull() ?: throw TransformerNotFoundException("Transfer not found for th provided app, topic, and transform IDs")
+    }
+
     fun getTransformer(
         appId: Long,
         topicId: Long,
         transformerId: Long
-    ): TransformerResponse = transaction {
-        val transformer = TransformerEntity.findById(transformerId)
-            ?: throw TransformerNotFoundException("Transform not found: id=$transformerId")
+    ): TransformerResponse =
+        getTransformer { (Transformers.appId eq appId) and (Transformers.topicId eq topicId) and (Transformers.id eq transformerId) }
 
-        if (transformer.appId.value != appId || transformer.topicId.value != topicId) {
-            throw TransformerNotFoundException(
-                "Transform not found: id=$transformerId in app=$appId, topic=$topicId"
-            )
-        }
+    fun getTransformer(
+        appId: Long,
+        topicName: String,
+        transformerName: String
+    ): TransformerResponse =
+        getTransformer { (Transformers.appId eq appId) and (Transformers.name eq topicName) and (Transformers.name eq transformerName) }
 
-        transformer.toResponse()
-    }
+
+    fun updateTransform(
+        appId: Long,
+        topicName: String,
+        transformName: String,
+        request: UpdateTransformerRequest
+    ): TransformerResponse =
+        updateTransform(appId, where = {
+            (Transformers.name eq transformName) and
+                    (Transformers.appId eq appId) and
+                    (Transformers.topicId inSubQuery Topics.slice(Topics.id).select {
+                        (Topics.appId eq appId) and (Topics.name eq topicName)
+                    })
+        }, request)
+
 
     fun updateTransform(
         appId: Long,
         topicId: Long,
-        transformId: Long,
+        transformerId: Long,
+        request: UpdateTransformerRequest
+    ): TransformerResponse =
+        updateTransform(appId, where = {
+            (Transformers.id eq transformerId) and
+                    (Transformers.appId eq appId) and
+                    (Transformers.topicId eq topicId)
+        }, request)
+
+
+    //(Transformers.id eq transformId) and (Transformers.appId eq appId) and (Transformers.topicId eq topicId)
+    private fun updateTransform(
+        appId: Long,
+        where: () -> org.jetbrains.exposed.sql.Op<Boolean>,
         request: UpdateTransformerRequest
     ): TransformerResponse = transaction {
-        val transformer = TransformerEntity.findById(transformId)
-            ?: throw TransformerNotFoundException("Transform not found: id=$transformId")
+        val transformer = TransformerEntity.find { where() }.firstOrNull() ?: throw TransformerNotFoundException("Transform not found, check provided IDs")
 
-        if (transformer.appId.value != appId || transformer.topicId.value != topicId) {
-            throw TransformerNotFoundException(
-                "Transform not found: id=$transformId in app=$appId, topic=$topicId"
-            )
-        }
+        // Convert and validate schema IDs from provided IDs or names
+        val schemaInfo = schemaValidationService.getTransformerRequestSchemaInfo(appId, request)
 
         // If code provided, validate and update hash
         request.code?.let { newCode ->
@@ -220,29 +361,43 @@ class TransformerService(
         request.enabled?.let { transformer.enabled = it }
 
         logger.info {
-            "Updated transform: id=$transformId, enabled=${transformer.enabled}"
+            "Updated transform: id=${transformer.name}, enabled=${transformer.enabled}"
         }
 
-        transformer.toResponse()
+        transformer.toResponse(schemaInfo.from?.name, schemaInfo.to.name)
+    }
+
+    private fun deleteTransform(
+        where: () -> Op<Boolean>
+    ): Unit = transaction {
+        val transformer = TransformerEntity.find { where() }.firstOrNull()
+            ?: throw TransformerNotFoundException("Transform not found, check IDs provided")
+
+        transformer.delete()
+
+        logger.info { "Deleted transform: id=${transformer.id}, name=${transformer.name}" }
     }
 
     fun deleteTransform(
         appId: Long,
         topicId: Long,
         transformId: Long
-    ): Unit = transaction {
-        val transformer = TransformerEntity.findById(transformId)
-            ?: throw TransformerNotFoundException("Transform not found: id=$transformId")
+    ): Unit = deleteTransform {
+        (Transformers.id eq transformId) and
+                (Transformers.appId eq appId) and
+                (Transformers.topicId eq topicId)
+    }
 
-        if (transformer.appId.value != appId || transformer.topicId.value != topicId) {
-            throw TransformerNotFoundException(
-                "Transform not found: id=$transformId in app=$appId, topic=$topicId"
-            )
-        }
-
-        transformer.delete()
-
-        logger.info { "Deleted transform: id=$transformId" }
+    fun deleteTransform(
+        appId: Long,
+        topicName: String,
+        transformName: String
+    ): Unit = deleteTransform {
+        (Transformers.name eq transformName) and
+                (Transformers.appId eq appId) and
+                (Transformers.topicId inSubQuery Topics.slice(Topics.id).select {
+                    (Topics.appId eq appId) and (Topics.name eq topicName)
+                })
     }
 
     private fun generateCodeHash(code: String): String {
@@ -251,13 +406,15 @@ class TransformerService(
         return digest.digest(prefixedCode.toByteArray()).joinToString("") { "%02x".format(it) }
     }
 
-    private fun TransformerEntity.toResponse(): TransformerResponse = TransformerResponse(
+    private fun TransformerEntity.toResponse(fromSchemaName: String?, toSchemaName: String): TransformerResponse = TransformerResponse(
         id = this.id.value,
         appId = this.appId.value,
         topicId = this.topicId.value,
         name = this.name,
         fromSchemaId = this.fromSchemaId?.value,
         toSchemaId = this.toSchemaId.value,
+        fromSchemaName = fromSchemaName,
+        toSchemaName = toSchemaName,
         lang = this.lang.toString(),
         code = this.code,
         codeHash = this.codeHash,

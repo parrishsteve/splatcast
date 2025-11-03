@@ -131,7 +131,7 @@ class ApiKeyService(
         }
 
         if (!appExists) {
-            throw AppNotFoundException(appId)
+            throw AppNotFoundException(appId = appId)
         }
     }
 

@@ -12,6 +12,7 @@ import co.vendistax.splatcast.services.AuditService
 import co.vendistax.splatcast.services.JavaScriptRuntimeService
 import co.vendistax.splatcast.services.PublishingService
 import co.vendistax.splatcast.services.SchemaService
+import co.vendistax.splatcast.services.SchemaValidationService
 import co.vendistax.splatcast.services.ServiceDependencies
 import co.vendistax.splatcast.services.TopicService
 import co.vendistax.splatcast.services.TransformerService
@@ -28,9 +29,12 @@ fun main() {
     }.start(wait = true)
 }
 
-fun Application.serviceModule(): ServiceDependencies  {
+private fun serviceModule(): ServiceDependencies  {
     val jsRuntime = JavaScriptRuntimeService()
-    val transformerService = TransformerService(jsRuntime)
+    val schemaValidationService = SchemaValidationService()
+    val transformerService = TransformerService(
+        jsRuntime = jsRuntime,
+        schemaValidationService = schemaValidationService)
     val subscriberSessionFactory = SubscriberSessionFactory(transformerService)
     val subscriberSessionHub = SubscriberSessionHub(subscriberSessionFactory = subscriberSessionFactory)
     val queueProducer = KafkaQueueProducer()
@@ -38,11 +42,14 @@ fun Application.serviceModule(): ServiceDependencies  {
     return ServiceDependencies (
         appService = AppService(),
         apiKeyService = ApiKeyService(),
-        topicService = TopicService(),
+        topicService = TopicService(schemaValidationService),
         auditService = AuditService(),
         schemaService = SchemaService(),
         transformerService = transformerService,
-        publishingService = PublishingService(transformerService = transformerService, queueBusProducer = queueProducer),
+        publishingService = PublishingService(
+            schemaValidationService = schemaValidationService,
+            transformerService = transformerService,
+            queueBusProducer = queueProducer),
         subscriberSessionHub = subscriberSessionHub,
     )
 }

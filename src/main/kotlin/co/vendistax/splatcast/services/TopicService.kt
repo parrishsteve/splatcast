@@ -15,8 +15,13 @@ import org.jetbrains.exposed.sql.and
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import org.jetbrains.exposed.dao.id.EntityID
+import org.jetbrains.exposed.sql.JoinType
+import org.jetbrains.exposed.sql.Op
+import org.jetbrains.exposed.sql.select
+import kotlin.jvm.Throws
 
 class TopicService(
+    private val schemaValidationService: SchemaValidationService,
     private val logger: Logger = LoggerFactory.getLogger<TopicService>(),
 ) {
     companion object {
@@ -25,6 +30,7 @@ class TopicService(
         private const val MAX_RETENTION_HOURS = 8760 // 1 year
     }
 
+    @Throws (IllegalArgumentException::class, SchemaNotFoundException::class )
     fun create(appId: Long, request: CreateTopicRequest): TopicResponse = transaction {
         // Validate app exists
         val app = AppEntity.findById(appId)
@@ -38,13 +44,15 @@ class TopicService(
             throw IllegalArgumentException("Topic name already exists: ${request.name}")
         }
 
+        val schemaInfo = schemaValidationService.getTopicRequestSchemaInfo(appId, request)
+
         // Create topic
         val topicEntity = TopicEntity.new {
             this.appId = app.id
             this.name = request.name
             this.description = request.description
             this.retentionHours = request.retentionHours
-            this.defaultSchemaId = request.defaultSchemaId?.let { EntityID(it, Schemas) }
+            this.defaultSchemaId = schemaInfo?.let { EntityID(it.id, Schemas) }
         }
 
         // Create quota
@@ -56,46 +64,73 @@ class TopicService(
         }
 
         logger.info { "Created topic: id=${topicEntity.id.value}, app=$appId, name=${request.name}" }
-        topicEntity.toResponse(quotas)
+        topicEntity.toResponse(schemaInfo, quotas)
+    }
+
+    // Can find by AppId and TopicId or by AppId and TopicName
+    private fun find(where: () -> org.jetbrains.exposed.sql.Op<Boolean>): TopicResponse = transaction {
+        Topics.join(Quotas, JoinType.LEFT, Topics.id, Quotas.topicId)
+            .join(Schemas, JoinType.LEFT, Topics.defaultSchemaId, Schemas.id)
+            .slice(Topics.columns + Quotas.columns + Schemas.id + Schemas.name)
+            .select { where() }
+            .map { row ->
+                val topicEntity = TopicEntity.wrapRow(row)
+                val quotaEntity = row.getOrNull(Quotas.id)?.let { QuotaEntity.wrapRow(row) }
+                val schemaInfo = row.getOrNull(Schemas.id)?.let {
+                    SchemaInfoResult(
+                        id = row[Schemas.id].value,
+                        name = row[Schemas.name]
+                    )
+                }
+                topicEntity.toResponse(schemaInfo, quotaEntity)
+            }
+            .firstOrNull()
+            ?: throw NoSuchElementException("Topic not found")
     }
 
     fun findByAppId(appId: Long): List<TopicResponse> = transaction {
-        val topics = TopicEntity.find { Topics.appId eq appId }.toList()
-        val topicIds = topics.map { it.id.value }
-
-        val quotaMap = QuotaEntity.find { Quotas.topicId inList topicIds }
-            .associateBy { it.topicId?.value }
-
-        topics.map { it.toResponse(quotaMap[it.id.value]) }
+        Topics.join(Quotas, JoinType.LEFT, Topics.id, Quotas.topicId)
+            .join(Schemas, JoinType.LEFT, Topics.defaultSchemaId, Schemas.id)
+            .slice(Topics.columns + Quotas.columns + Schemas.id + Schemas.name)
+            .select { Topics.appId eq appId }
+            .map { row ->
+                val topicEntity = TopicEntity.wrapRow(row)
+                val quotaEntity = row.getOrNull(Quotas.id)?.let { QuotaEntity.wrapRow(row) }
+                val schemaInfo = row.getOrNull(Schemas.id)?.let {
+                    SchemaInfoResult(
+                        id = row[Schemas.id].value,
+                        name = row[Schemas.name]
+                    )
+                }
+                topicEntity.toResponse(schemaInfo, quotaEntity)
+            }
     }
 
-    fun findById(appId: Long, topicId: Long): TopicResponse = transaction {
-        val topicEntity = TopicEntity.find {
-            (Topics.id eq topicId) and (Topics.appId eq appId)
-        }.firstOrNull()
-            ?: throw NoSuchElementException("Topic not found: id=$topicId, app=$appId")
+    fun findById(appId: Long, topicId: Long): TopicResponse = find { (Topics.id eq topicId) and (Topics.appId eq appId) }
 
-        val quota = QuotaEntity.find { Quotas.topicId eq topicId }.firstOrNull()
-        topicEntity.toResponse(quota)
-    }
+    fun findByAppIdAndName(appId: Long, name: String): TopicResponse = find { (Topics.appId eq appId) and (Topics.name eq name) }
 
-    fun findByAppIdAndName(appId: Long, name: String): List<TopicResponse> = transaction {
-        val topics = TopicEntity.find {
-            (Topics.appId eq appId) and (Topics.name eq name)
-        }.toList()
+    fun update (
+        appId: Long,
+        topicName: String,
+        request: UpdateTopicRequest): TopicResponse =
+        update(appId, { (Topics.name eq topicName) and (Topics.appId eq appId) }, request)
 
-        val topicIds = topics.map { it.id.value }
-        val quotaMap = QuotaEntity.find { Quotas.topicId inList topicIds }
-            .associateBy { it.topicId?.value }
+    fun update (
+        appId: Long,
+        topicId: Long,
+        request: UpdateTopicRequest): TopicResponse =
+        update(appId, { (Topics.id eq topicId) and (Topics.appId eq appId) }, request)
 
-        topics.map { it.toResponse(quotaMap[it.id.value]) }
-    }
+    private fun update(
+        appId: Long,
+        where: () -> Op<Boolean>,
+        request: UpdateTopicRequest): TopicResponse = transaction {
 
-    fun update(appId: Long, topicId: Long, request: UpdateTopicRequest): TopicResponse = transaction {
-        val topicEntity = TopicEntity.find {
-            (Topics.id eq topicId) and (Topics.appId eq appId)
-        }.firstOrNull()
-            ?: throw NoSuchElementException("Topic not found: id=$topicId, app=$appId")
+        val topicEntity = TopicEntity.find { where() }.firstOrNull()
+            ?: throw NoSuchElementException("Topic not found check IDs")
+
+        val topicId = topicEntity.id.value
 
         // Validate if changing name
         request.name?.let { newName ->
@@ -114,7 +149,16 @@ class TopicService(
         }
 
         request.description?.let { topicEntity.description = it }
-        request.defaultSchemaId?.let { topicEntity.defaultSchemaId = EntityID(it, Schemas) }
+
+        var schemaInfo: SchemaInfoResult? = null
+        if (request.defaultSchemaId != null || !request.defaultSchemaName.isNullOrEmpty()) {
+            // then validate it
+            schemaInfo = schemaValidationService.getTopicRequestSchemaInfo(appId, request)
+            if (schemaInfo != null) {
+                topicEntity.defaultSchemaId = EntityID(schemaInfo.id, Schemas)
+            }
+        }
+
         topicEntity.updatedAt = OffsetDateTime.now()
 
         // Update quotas
@@ -130,34 +174,47 @@ class TopicService(
 
         val quota = QuotaEntity.find { Quotas.topicId eq topicId }.firstOrNull()
         logger.info { "Updated topic: id=$topicId, app=$appId" }
-        topicEntity.toResponse(quota)
+        topicEntity.toResponse(schemaInfo, quota)
     }
 
-    fun updateDefaultSchema(appId: Long, topicId: Long, defaultSchemaId: Long): TopicResponse = transaction {
-        val topicEntity = TopicEntity.find {
-            (Topics.id eq topicId) and (Topics.appId eq appId)
-        }.firstOrNull()
-            ?: throw NoSuchElementException("Topic not found: appId=$appId, topicId=$topicId")
+    private fun patch(
+        appId: Long,
+        where: () -> Op<Boolean>,
+        request: PatchTopicRequest): TopicResponse = transaction {
+        val topicEntity = TopicEntity.find { where() }.firstOrNull()
+            ?: throw NoSuchElementException("Topic not found check IDs")
 
-        topicEntity.defaultSchemaId = EntityID(defaultSchemaId, Schemas)
-        topicEntity.updatedAt = OffsetDateTime.now()
-
-        logger.info { "Updated default schema for topic: topicId=$topicId, schemaId=$defaultSchemaId" }
-
-        val quota = QuotaEntity.find { Quotas.topicId eq topicId }.firstOrNull()
-        topicEntity.toResponse(quota)
+        // Validate if changing default schema
+        val schemaInfo = schemaValidationService.getTopicRequestSchemaInfo(appId, request)
+            ?: throw IllegalArgumentException("No schema exists specified for topic")
+        topicEntity.toResponse(schemaInfo)
     }
 
-    fun delete(appId: Long, topicId: Long) = transaction {
-        val topicEntity = TopicEntity.find {
-            (Topics.id eq topicId) and (Topics.appId eq appId)
-        }.firstOrNull()
-            ?: throw NoSuchElementException("Topic not found: id=$topicId, app=$appId")
+    fun patch(
+        appId: Long,
+        topicId: Long,
+        request: PatchTopicRequest): TopicResponse =
+        patch(appId, { (Topics.id eq topicId) and (Topics.appId eq appId) }, request)
 
-        QuotaEntity.find { Quotas.topicId eq topicId }.forEach { it.delete() }
+
+    fun patch (
+        appId: Long,
+        topicName: String,
+        request: PatchTopicRequest): TopicResponse =
+        patch(appId, { (Topics.name eq topicName) and (Topics.appId eq appId) }, request)
+
+    private fun delete(
+        appId: Long,
+        where: () -> Op<Boolean>) = transaction {
+        val topicEntity = TopicEntity.find { where() }.firstOrNull()
+            ?: throw NoSuchElementException("Topic not found: app=$appId")
         topicEntity.delete()
-        logger.info { "Deleted topic: id=$topicId, app=$appId" }
+        logger.info { "Deleted topic: id=${topicEntity.id.value}, name=${topicEntity.name} app=$appId" }
     }
+
+    fun delete(appId: Long, topicId: Long) = delete(appId, where = { (Topics.id eq topicId) and (Topics.appId eq appId) })
+
+    fun delete(appId: Long, topicName: String) = delete(appId, where = { (Topics.name eq topicName) and (Topics.appId eq appId) })
 
     private fun isTopicNameTaken(appId: Long, name: String, excludeTopicId: Long? = null): Boolean {
         val query = (Topics.appId eq appId) and (Topics.name eq name)
@@ -186,14 +243,15 @@ class TopicService(
         }
     }
 
-    private fun TopicEntity.toResponse(quotaEntity: QuotaEntity? = null): TopicResponse {
+    private fun TopicEntity.toResponse(schemaInfo: SchemaInfoResult?, quotaEntity: QuotaEntity? = null): TopicResponse {
         return TopicResponse(
             id = this.id.value,
             appId = this.appId.value,
             name = this.name,
             description = this.description,
             retentionHours = this.retentionHours,
-            defaultSchemaId = this.defaultSchemaId?.value,
+            defaultSchemaId = schemaInfo?.id,
+            defaultSchemaName = schemaInfo?.name,
             quotas = QuotaSettings(
                 perMinute = quotaEntity?.perMinute ?: DEFAULT_QUOTA_PER_MINUTE,
                 perDay = quotaEntity?.perDay ?: DEFAULT_QUOTA_PER_DAY
