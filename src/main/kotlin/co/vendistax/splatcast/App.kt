@@ -32,17 +32,20 @@ fun main() {
 private fun serviceModule(): ServiceDependencies  {
     val jsRuntime = JavaScriptRuntimeService()
     val schemaValidationService = SchemaValidationService()
+    val topicService = TopicService(schemaValidationService)
     val transformerService = TransformerService(
         jsRuntime = jsRuntime,
         schemaValidationService = schemaValidationService)
-    val subscriberSessionFactory = SubscriberSessionFactory(transformerService)
+    val subscriberSessionFactory = SubscriberSessionFactory(
+        topicService = topicService,
+        transformerService = transformerService)
     val subscriberSessionHub = SubscriberSessionHub(subscriberSessionFactory = subscriberSessionFactory)
     val queueProducer = KafkaQueueProducer()
 
     return ServiceDependencies (
         appService = AppService(),
         apiKeyService = ApiKeyService(),
-        topicService = TopicService(schemaValidationService),
+        topicService = topicService,
         auditService = AuditService(),
         schemaService = SchemaService(),
         transformerService = transformerService,

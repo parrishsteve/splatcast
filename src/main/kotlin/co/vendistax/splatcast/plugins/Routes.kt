@@ -31,6 +31,8 @@ fun Application.configureRoutes(
         eventPublishingRoutes(
             appService = serviceDependencies.appService,
             eventPublishingService = serviceDependencies.publishingService)
-        webSocketRoutes(serviceDependencies.subscriberSessionHub)
+        webSocketRoutes(
+            appService = serviceDependencies.appService,
+            subscriberSessionHub = serviceDependencies.subscriberSessionHub)
     }
 }

@@ -3,6 +3,7 @@ package co.vendistax.splatcast.services
 import co.vendistax.splatcast.database.entities.AppEntity
 import co.vendistax.splatcast.database.entities.QuotaEntity
 import co.vendistax.splatcast.database.entities.TopicEntity
+import co.vendistax.splatcast.database.entities.TransformerEntity
 import co.vendistax.splatcast.database.tables.Quotas
 import co.vendistax.splatcast.database.tables.Schemas
 import co.vendistax.splatcast.database.tables.Topics
@@ -109,6 +110,26 @@ class TopicService(
     fun findById(appId: Long, topicId: Long): TopicResponse = find { (Topics.id eq topicId) and (Topics.appId eq appId) }
 
     fun findByAppIdAndName(appId: Long, name: String): TopicResponse = find { (Topics.appId eq appId) and (Topics.name eq name) }
+
+    private fun geTopic(
+        where: () -> Op<Boolean>
+    ): TopicEntity? {
+        return TopicEntity.find { where() }.firstOrNull()
+    }
+
+    fun getTopicEntityById(
+        appId: Long,
+        topicId: Long
+    ): TopicEntity = transaction {
+        geTopic { (Topics.id eq topicId) and (Topics.appId eq appId) } ?: throw NoSuchElementException("Topic not found: app=$appId, topic=$topicId")
+    }
+
+    fun getTopicEntityByName(
+        appId: Long,
+        topicName: String
+    ): TopicEntity = transaction {
+        geTopic { (Topics.name eq topicName) and (Topics.appId eq appId) } ?: throw NoSuchElementException("Topic not found: app=$appId, topic=$topicName")
+    }
 
     fun update (
         appId: Long,

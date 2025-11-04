@@ -19,13 +19,13 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.inSubQuery
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
 import org.jetbrains.exposed.sql.alias
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.or
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.security.MessageDigest
 import kotlin.Boolean
 import kotlin.and
-import kotlin.collections.get
-import kotlin.plus
+import kotlin.or
 import kotlin.text.get
 
 class InvalidTransformCodeException(message: String) : IllegalArgumentException(message)
@@ -198,18 +198,6 @@ class TransformerService(
         )
     }
 
-    /*fun getTransformersOrg(
-        appId: Long,
-        topicId: Long
-    ): List<TransformerResponse> = transaction {
-        TransformerEntity.find {
-            (Transformers.appId eq appId) and (Transformers.topicId eq topicId)
-        }.map {
-            val schemaInfo = schemaValidationService.getTransformerSchemaInfo(it)
-            it.toResponse(schemaInfo.from?.name, schemaInfo.to.name)
-        }
-    }*/
-
     private fun getTransformers(
         where: () -> org.jetbrains.exposed.sql.Op<Boolean>
     ): List<TransformerResponse> = transaction {
@@ -253,15 +241,37 @@ class TransformerService(
         getTransformers { (Transformers.appId eq appId) and (Transformers.id eq transformerId) }
     }
 
-    fun getTransformerEntity(
-        appId: Long,
-        topicId: Long,
-        transformerId: Long
-    ): TransformerEntity? = transaction {
-        val entity = TransformerEntity.findById(transformerId)
-            ?: throw TransformerNotFoundException("Transform not found: id=$transformerId")
-        if (entity.appId.value != appId || entity.topicId.value != topicId) return@transaction null
-        entity
+    fun getTransformerEntityFromTopic(
+        topicEntity: TopicEntity,
+        toSchemaId: Long
+    ): TransformerEntity? {
+        require(topicEntity.defaultSchemaId != null) {
+            "Topic ${topicEntity.id.value} does not have a default schema defined"
+        }
+
+        val baseCondition = (Transformers.appId eq topicEntity.appId.value) and
+                (Transformers.topicId eq topicEntity.id.value) and
+                (Transformers.toSchemaId eq EntityID(toSchemaId, Schemas)) and
+                (Transformers.enabled eq true)
+
+        val schemaCondition = Transformers.fromSchemaId.isNull() or
+                (Transformers.fromSchemaId eq topicEntity.defaultSchemaId)
+
+        return TransformerEntity.find { baseCondition and schemaCondition }.firstOrNull()
+    }
+
+    fun getTransformerEntityFromTopic(
+        topicEntity: TopicEntity,
+        toSchemaName: String
+    ): TransformerEntity? {
+        require(topicEntity.defaultSchemaId != null) {
+            "Topic ${topicEntity.id.value} does not have a default schema defined"
+        }
+        val toSchemaId = Schemas
+            .select { (Schemas.appId eq topicEntity.appId.value) and (Schemas.name eq toSchemaName) }
+            .map { it[Schemas.id].value }
+            .firstOrNull() ?: return null
+        return getTransformerEntityFromTopic(topicEntity, toSchemaId)
     }
 
     private fun getTransformer(
