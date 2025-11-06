@@ -1,5 +1,6 @@
 package co.vendistax.splatcast.api.v1.routes
 
+import co.vendistax.splatcast.Config
 import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
 import co.vendistax.splatcast.models.CreateTransformerRequest
@@ -17,7 +18,7 @@ fun Route.transformerRoutes(
     logger: Logger = LoggerFactory.getLogger("transformerRoutes"),
 ) {
     // ID-based routes: /apps/{appId}/topics/{topicId}/transformers
-    route("/apps/{appId}/topics/{topicId}/transformers") {
+    route("${Config.BASE_URL}/apps/{appId}/topics/{topicId}/transformers") {
 
         post {
             val appId = call.parameters["appId"].validateRequired("appId").toLongOrNull()
@@ -56,6 +57,8 @@ fun Route.transformerRoutes(
             try {
                 val transformers = transformerService.getTransformers(appId, topicId)
                 call.respond(HttpStatusCode.OK, transformers)
+            } catch (e: TransformerNotFoundException) {
+                call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
             } catch (e: Exception) {
                 logger.error(e, "Failed to retrieve transformers: app=$appId, topic=$topicId")
                 call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
@@ -93,7 +96,7 @@ fun Route.transformerRoutes(
 
             try {
                 val request = call.receive<UpdateTransformerRequest>()
-                val transformer = transformerService.updateTransform(appId, topicId, transformId, request)
+                val transformer = transformerService.updateTransformer(appId, topicId, transformId, request)
                 call.respond(HttpStatusCode.OK, transformer)
             } catch (e: TransformerNotFoundException) {
                 call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
@@ -129,7 +132,7 @@ fun Route.transformerRoutes(
     }
 
     // Name-based routes: /apps/by-name/{appName}/topics/{topicName}/transformers
-    route("/apps/by-name/{appName}/topics/{topicName}/transformers") {
+    route("${Config.BASE_URL}/apps/${Config.NAME_URL_PREFACE}/{appName}/topics/{topicName}/transformers") {
 
         post {
             val appName = call.parameters["appName"].validateRequired("appName")
@@ -166,6 +169,8 @@ fun Route.transformerRoutes(
                 call.respond(HttpStatusCode.OK, transformers)
             } catch (e: AppNotFoundException) {
                 call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
+            } catch (e: TransformerNotFoundException) {
+                call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
             } catch (e: Exception) {
                 logger.error(e, "Failed to retrieve transformers: app=$appName, topic=$topicName")
                 call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
@@ -200,7 +205,7 @@ fun Route.transformerRoutes(
             try {
                 val app = appService.findByName(appName)
                 val request = call.receive<UpdateTransformerRequest>()
-                val updated = transformerService.updateTransform(app.appId, topicName, transformerName, request)
+                val updated = transformerService.updateTransformer(app.appId, topicName, transformerName, request)
                 call.respond(HttpStatusCode.OK, updated)
             } catch (e: AppNotFoundException) {
                 call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
@@ -224,6 +229,7 @@ fun Route.transformerRoutes(
                 transformerService.deleteTransform(app.appId, topicName, transformerName)
                 call.respond(HttpStatusCode.NoContent)
             } catch (e: TransformerNotFoundException) {
+                logger.error(e, "Transformer not found: transformer=$transformerName")
                 call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
             } catch (e: Exception) {
                 logger.error(e, "Failed to delete transformer=$transformerName")

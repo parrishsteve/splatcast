@@ -12,7 +12,6 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.dao.id.EntityID
-import kotlinx.serialization.json.*
 import java.time.format.DateTimeFormatter
 
 class SchemaNotFoundException(message: String) : NoSuchElementException(message)
@@ -50,9 +49,6 @@ class SchemaService(
                 "Schema with name '${request.name}' already exists"
             )
         }
-
-        // Validate JSON Schema format
-        validateJsonSchema(request.jsonSchema)
 
         val status = SchemaStatus.fromString(request.status)
 
@@ -128,6 +124,19 @@ class SchemaService(
         }.firstOrNull()
             ?: throw SchemaNotFoundException("Schema not found: id=$schemaId")
 
+        // Check for name conflict if name is being changed
+        if (request.name != schema.name) {
+            val existingSchema = SchemaEntity.find {
+                (Schemas.appId eq appId) and (Schemas.name eq request.name)
+            }.firstOrNull()
+
+            if (existingSchema != null) {
+                throw IllegalArgumentException(
+                    "Schema with name '${request.name}' already exists"
+                )
+            }
+        }
+
         // Validate status transition
         val newStatus = SchemaStatus.fromString(request.status)
         if (!isValidStatusTransition(schema.status, newStatus)) {
@@ -136,11 +145,16 @@ class SchemaService(
             )
         }
 
+        val oldName = schema.name
         val oldStatus = schema.status
+
+        // Update all fields
+        schema.name = request.name
+        schema.jsonSchema = request.jsonSchema
         schema.status = newStatus
 
         logger.info {
-            "Updated schema status: id=$schemaId, name=${schema.name}, status=$oldStatus -> $newStatus"
+            "Updated schema: id=$schemaId, name=$oldName -> ${request.name}, status=$oldStatus -> $newStatus"
         }
 
         schema.toResponse()
@@ -166,31 +180,6 @@ class SchemaService(
         schema.delete()
 
         logger.info { "Deleted schema: id=$schemaId, name=$name" }
-    }
-
-    private fun validateJsonSchema(jsonSchema: JsonObject) {
-        // Basic JSON Schema validation - check for required fields
-        val hasSchemaField = jsonSchema.containsKey("\$schema")
-        val hasTypeField = jsonSchema.containsKey("type")
-
-        if (!hasSchemaField && !hasTypeField) {
-            throw InvalidSchemaException(
-                "Invalid JSON Schema: must contain '\$schema' or 'type' field"
-            )
-        }
-
-        // Additional validation: if 'type' exists, it should be a valid JSON Schema type
-        jsonSchema["type"]?.let { typeElement ->
-            if (typeElement is JsonPrimitive && typeElement.isString) {
-                val typeValue = typeElement.content
-                val validTypes = setOf("object", "array", "string", "number", "integer", "boolean", "null")
-                if (typeValue !in validTypes) {
-                    throw InvalidSchemaException(
-                        "Invalid JSON Schema type: $typeValue. Must be one of $validTypes"
-                    )
-                }
-            }
-        }
     }
 
     private fun validatePagination(limit: Int, offset: Int) {

@@ -1,5 +1,6 @@
 package co.vendistax.splatcast.api.v1.routes
 
+import co.vendistax.splatcast.Config
 import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
 import co.vendistax.splatcast.models.PublishEventRequest
@@ -10,12 +11,52 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
+private suspend fun handleException(
+    e: Exception,
+    logger: Logger,
+    appIdentifier: String,
+    topicIdentifier: String,
+    call: io.ktor.server.application.ApplicationCall
+) {
+    when (e) {
+        is TransformerNotFoundException -> {
+            logger.error(e, "Transformer not found: app=$appIdentifier, topic=$topicIdentifier")
+            call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
+        }
+        is SchemaNotFoundException -> {
+            logger.error(e, "Schema not found: app=$appIdentifier, topic=$topicIdentifier")
+            call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
+        }
+        is SchemaVersionRequiredException -> {
+            logger.error(e, "Schema version required: app=$appIdentifier, topic=$topicIdentifier")
+            call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
+        }
+        is SchemaMismatchException -> {
+            logger.error(e, "Schema mismatch: app=$appIdentifier, topic=$topicIdentifier")
+            call.respond(HttpStatusCode.NotAcceptable, mapOf("error" to e.message))
+        }
+        is QueuePublishException -> {
+            logger.error(e, "Queue publish failed: app=$appIdentifier, topic=$topicIdentifier")
+            call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Failed to publish to queue"))
+        }
+        is IllegalArgumentException -> {
+            logger.error(e, "Invalid publish request argument: app=$appIdentifier, topic=$topicIdentifier")
+            call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
+        }
+        else -> {
+            logger.error(e, "Failed to publish event: app=$appIdentifier, topic=$topicIdentifier")
+            call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+        }
+    }
+}
+
+
 fun Route.eventPublishingRoutes(
     appService: AppService,
     eventPublishingService: PublishingService,
     logger: Logger = LoggerFactory.getLogger("eventPublishingRoutes"),
 ) {
-    route("/apps/{appId}/topics/{topicId}") {
+    route("${Config.BASE_URL}/apps/{appId}/topics/{topicId}") {
 
         post("/publish") {
             val appId = call.parameters["appId"].validateRequired("appId").toLong()
@@ -27,28 +68,16 @@ fun Route.eventPublishingRoutes(
 
                 val response = eventPublishingService.publishEvent(appId, topicId, request, idempotencyKey)
                 call.respond(HttpStatusCode.Created, response)
-            } catch (e: TransformerNotFoundException) {
-                call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
-            } catch (e: SchemaVersionRequiredException) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
-            } catch (e: SchemaMismatchException) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
-            } catch (e: QueuePublishException) {
-                logger.error(e, "Queue publish failed: app=$appId, topic=$topicId")
-                call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Failed to publish to queue"))
-            } catch (e: IllegalArgumentException) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
             } catch (e: Exception) {
-                logger.error(e, "Failed to publish event: app=$appId, topic=$topicId")
-                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+                handleException(e, logger, appId.toString(), topicId.toString(), call)
             }
         }
     }
-    route("/apps/by-name/{appName}/topics/{topicName}") {
+    route("${Config.BASE_URL}/apps/${Config.NAME_URL_PREFACE}/{appName}/topics/{topicName}") {
 
         post("/publish") {
-            val appName = call.parameters["appId"].validateRequired("appId")
-            val topicName = call.parameters["topicId"].validateRequired("topicId")
+            val appName = call.parameters["appName"].validateRequired("appName")
+            val topicName = call.parameters["topicName"].validateRequired("topicName")
 
             try {
                 val request = call.receive<PublishEventRequest>()
@@ -57,20 +86,8 @@ fun Route.eventPublishingRoutes(
                 val app = appService.findByName(appName)
                 val response = eventPublishingService.publishEvent(app.appId, topicName, request, idempotencyKey)
                 call.respond(HttpStatusCode.Created, response)
-            } catch (e: TransformerNotFoundException) {
-                call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
-            } catch (e: SchemaVersionRequiredException) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
-            } catch (e: SchemaMismatchException) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
-            } catch (e: QueuePublishException) {
-                logger.error(e, "Queue publish failed: app=$appName, topic=$topicName")
-                call.respond(HttpStatusCode.ServiceUnavailable, mapOf("error" to "Failed to publish to queue"))
-            } catch (e: IllegalArgumentException) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
-            } catch (e: Exception) {
-                logger.error(e, "Failed to publish event: app=$appName, topic=$topicName")
-                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+            }  catch (e: Exception) {
+                handleException(e, logger, appName, topicName, call)
             }
         }
     }

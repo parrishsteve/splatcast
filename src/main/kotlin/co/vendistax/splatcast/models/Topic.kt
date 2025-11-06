@@ -13,16 +13,12 @@ data class CreateTopicRequest(
     val quotas: QuotaSettings = QuotaSettings()
 ) {
     fun validate(): CreateTopicRequest {
-        name.validateRequired("name")
-            .validateLength("name", min = 1, max = 100)
-            .validatePattern("name", Regex("^[a-zA-Z0-9_-]+$"), "Name can only contain letters, numbers, underscores, and hyphens")
-
+        name.validateName("name")
         description?.validateLength("description", max = 500)
 
         if (retentionHours <= 0) {
             throw ValidationException("retentionHours must be greater than 0")
         }
-
         quotas.validate()
         return this
     }
@@ -74,9 +70,7 @@ data class UpdateTopicRequest(
     val quotas: QuotaSettings? = null
 ) {
     fun validate(): UpdateTopicRequest {
-        name?.validateLength("name", min = 1, max = 100)
-            ?.validatePattern("name", Regex("^[a-zA-Z0-9_-]+$"), "Name can only contain letters, numbers, underscores, and hyphens")
-
+        name?.validateName("name")
         description?.validateLength("description", max = 500)
 
         retentionHours?.let {
@@ -84,7 +78,6 @@ data class UpdateTopicRequest(
                 throw ValidationException("retentionHours must be greater than 0")
             }
         }
-
         quotas?.validate()
         return this
     }

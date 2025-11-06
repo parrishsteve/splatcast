@@ -1,5 +1,6 @@
 package co.vendistax.splatcast.api.v1.routes
 
+import co.vendistax.splatcast.Config
 import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
 import co.vendistax.splatcast.models.*
@@ -18,7 +19,7 @@ fun Route.topicRoutes(
     logger: Logger = LoggerFactory.getLogger("topicRoutes"),
 ) {
     // ID-based routes: /apps/{appId}/topics
-    route("/apps/{appId}/topics") {
+    route("${Config.BASE_URL}/apps/{appId}/topics") {
         get {
             val appId = call.parameters["appId"].validateRequired("appId").toLongOrNull()
             if (appId == null) {
@@ -145,7 +146,7 @@ fun Route.topicRoutes(
     }
 
     // Name-based routes: /apps/by-name/{appName}/topics
-    route("/apps/by-name/{appName}/topics") {
+    route("${Config.BASE_URL}/apps/${Config.NAME_URL_PREFACE}/{appName}/topics") {
         get {
             val appName = call.parameters["appName"].validateRequired("appName")
 

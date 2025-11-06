@@ -8,6 +8,7 @@ import org.jetbrains.exposed.dao.id.LongIdTable
 import org.jetbrains.exposed.sql.javatime.timestampWithTimeZone
 import org.jetbrains.exposed.sql.json.jsonb
 import java.time.OffsetDateTime
+import kotlin.toString
 
 object Schemas : LongIdTable("schemas") {
     val appId = reference("app_id", Apps)
@@ -30,12 +31,15 @@ object Schemas : LongIdTable("schemas") {
 }
 
 enum class SchemaStatus {
-    DRAFT, ACTIVE, DEPRECATED;
+    DRAFT, ACTIVE, DEPRECATED, UNKNOWN;
     override fun toString(): String = name.lowercase()
     companion object {
-        fun fromString(value: String): SchemaStatus =
+        fun fromString(value: String, default: SchemaStatus = ACTIVE): SchemaStatus =
             runCatching {
                 SchemaStatus.valueOf(value.uppercase())
-            }.getOrElse { ACTIVE }
+            }.getOrElse { default }
+
+        fun getAllStatuses(): String =
+            SchemaStatus.entries.filter { it != UNKNOWN }.joinToString(", ") { it.toString() }
     }
 }

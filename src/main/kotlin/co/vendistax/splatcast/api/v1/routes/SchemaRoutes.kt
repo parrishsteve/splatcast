@@ -1,5 +1,6 @@
 package co.vendistax.splatcast.api.v1.routes
 
+import co.vendistax.splatcast.Config
 import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
 import co.vendistax.splatcast.models.CreateSchemaRequest
@@ -17,7 +18,7 @@ fun Route.schemaRoutes(
     logger: Logger = LoggerFactory.getLogger("schemaRoutes"),
 ) {
     // ID-based routes: /apps/{appId}/schemas
-    route("/apps/{appId}/schemas") {
+    route("${Config.BASE_URL}/apps/{appId}/schemas") {
         post {
             val appId = call.parameters["appId"].validateRequired("appId").toLongOrNull()
             if (appId == null) {
@@ -26,7 +27,7 @@ fun Route.schemaRoutes(
             }
 
             try {
-                val request = call.receive<CreateSchemaRequest>()
+                val request = call.receive<CreateSchemaRequest>().validate()
                 val schema = schemaService.createSchema(appId, request)
                 call.respond(HttpStatusCode.Created, schema)
             } catch (e: InvalidSchemaException) {
@@ -91,7 +92,7 @@ fun Route.schemaRoutes(
             }
 
             try {
-                val request = call.receive<UpdateSchemaRequest>()
+                val request = call.receive<UpdateSchemaRequest>().validate()
                 val schema = schemaService.updateSchema(appId, schemaId, request)
                 call.respond(HttpStatusCode.OK, schema)
             } catch (e: SchemaNotFoundException) {
@@ -129,13 +130,13 @@ fun Route.schemaRoutes(
     }
 
     // Name-based routes: /apps/by-name/{appName}/schemas
-    route("/apps/by-name/{appName}/schemas") {
+    route("${Config.BASE_URL}/apps/${Config.NAME_URL_PREFACE}/{appName}/schemas") {
         post {
             val appName = call.parameters["appName"].validateRequired("appName")
 
             try {
                 val app = appService.findByName(appName)
-                val request = call.receive<CreateSchemaRequest>()
+                val request = call.receive<CreateSchemaRequest>().validate()
                 val schema = schemaService.createSchema(app.appId, request)
                 call.respond(HttpStatusCode.Created, schema)
             } catch (e: AppNotFoundException) {
@@ -198,7 +199,7 @@ fun Route.schemaRoutes(
             try {
                 val app = appService.findByName(appName)
                 val existingSchema = schemaService.getSchemaByName(app.appId, schemaName)
-                val request = call.receive<UpdateSchemaRequest>()
+                val request = call.receive<UpdateSchemaRequest>().validate()
                 val schema = schemaService.updateSchema(app.appId, existingSchema.id, request)
                 call.respond(HttpStatusCode.OK, schema)
             } catch (e: AppNotFoundException) {

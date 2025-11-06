@@ -1,11 +1,8 @@
 package co.vendistax.splatcast.services
 
-import co.vendistax.splatcast.database.entities.SchemaEntity
 import co.vendistax.splatcast.database.entities.TopicEntity
 import co.vendistax.splatcast.database.entities.TransformerEntity
-import co.vendistax.splatcast.database.tables.Schemas
 import co.vendistax.splatcast.database.tables.Topics
-import co.vendistax.splatcast.database.tables.Transformers
 import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
 import co.vendistax.splatcast.models.*
@@ -13,14 +10,13 @@ import co.vendistax.splatcast.queue.QueueBusProducer
 import co.vendistax.splatcast.queue.QueueChannel
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.JsonObject
-import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.isNull
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.OffsetDateTime
 import java.util.*
+import kotlin.toString
 
 class SchemaVersionRequiredException(message: String) : IllegalArgumentException(message)
 
@@ -63,44 +59,50 @@ class PublishingService(
         idempotencyKey = idempotencyKey
     )
 
+    @Throws (
+        SchemaNotFoundException::class,
+        SchemaMismatchException::class,
+        IllegalArgumentException::class,
+        SchemaVersionRequiredException::class,
+        TransformerNotFoundException::class,
+        QueuePublishException::class)
     private fun publishEvent(
         appId: Long,
         where: () -> Op<Boolean>,
         request: PublishEventRequest,
         idempotencyKey: String? = null
-    ): PublishEventResponse = transaction {
-        // Validate request
-        val topic = TopicEntity.find { where() }.firstOrNull()
-            ?: throw TransformerNotFoundException("Topic not found for appId=$appId")
+    ): PublishEventResponse {
+        val (eventId, topicId, topicName, transformResult) = transaction {
+            val topic = TopicEntity.find { where() }.firstOrNull()
+                ?: throw TransformerNotFoundException("Topic not found for appId=$appId")
 
-        val validation = validatePublishRequest(topic, request)
+            val validation = validatePublishRequest(topic, request)
+            val transformResult = applyTransformation(validation, request.data)
+            val eventId = idempotencyKey?.let { "evt_$it" } ?: "evt_${UUID.randomUUID()}"
 
-        // Transform if needed
-        val transformResult = applyTransformation(validation, request.data)
-
-        // Publish to queue
-        val eventId = idempotencyKey?.let { "evt_$it" } ?: "evt_${UUID.randomUUID()}"
-        val publishedAt = OffsetDateTime.now()
-
-        publishToQueue(
-            appId = appId,
-            topicId = topic.id.value,
-            eventId = eventId,
-            data = transformResult.data
-        )
-
-        logger.info {
-            "Published event: id=$eventId, topicId=${topic.id.value}, topicName:${topic.name}, transforms=${transformResult.transformsApplied}"
+            PublishData(eventId, topic.id.value, topic.name, transformResult)
         }
 
-        PublishEventResponse(
+        // Publish after transaction commits
+        publishToQueue(appId, topicId, eventId, transformResult.data)
+
+        logger.info { "Published event: id=$eventId, topicId=$topicId, topicName=$topicName" }
+
+        return PublishEventResponse(
             eventId = eventId,
-            topicId = topic.id.value,
-            topicName = topic.name,
-            publishedAt = publishedAt.toString(),
+            topicId = topicId,
+            topicName = topicName,
+            publishedAt = OffsetDateTime.now().toString(),
             transformsApplied = transformResult.transformsApplied
         )
     }
+
+    private data class PublishData(
+        val eventId: String,
+        val topicId: Long,
+        val topicName: String,
+        val transformResult: TransformResult
+    )
 
     suspend fun batchPublishAsync(
         appId: Long,
@@ -144,21 +146,20 @@ class PublishingService(
         return BatchPublishResponse(published, failed)
     }
 
-    // Synchronous wrapper for backward compatibility
-    fun batchPublish(appId: Long, topicId: Long, request: BatchPublishRequest): BatchPublishResponse {
-        return runBlocking {
-            batchPublishAsync(appId, topicId, request)
-        }
-    }
-
+    @Throws (
+        SchemaNotFoundException::class,
+        SchemaMismatchException::class,
+        IllegalArgumentException::class,
+        SchemaVersionRequiredException::class,
+        TransformerNotFoundException::class)
     private fun validatePublishRequest(
         topic: TopicEntity,
         request: PublishEventRequest
-    ): ValidationData = transaction {
+    ): ValidationData {
         // Find topic
 
-        require(request.schemaId != null || !request.schemaName.isNullOrEmpty()) {
-            "The documents Schema ID must be provided in publish request"
+        if (request.schemaId == null && request.schemaName.isNullOrEmpty()) {
+            throw SchemaVersionRequiredException("The documents Schema ID must be provided in publish request")
         }
 
         val (schemaId, toSchemaId) = schemaValidationService.getTransformerRequestSchemaInfo(topic.appId.value, request)
@@ -166,8 +167,9 @@ class PublishingService(
 
         // Validate schema version is provided when topic has default schema
         if (topic.defaultSchemaId != null && targetSchemaId != topic.defaultSchemaId?.value) {
-            throw SchemaVersionRequiredException(
-                "Schema version required for topic with default schema"
+            throw SchemaMismatchException(
+                "Target schema version of document and default topic schema must match. Topic default schema ID: " +
+                        "${topic.defaultSchemaId?.value}, provided schema ID: $schemaId, transformToSchemaId: $toSchemaId"
             )
         }
 
@@ -181,11 +183,11 @@ class PublishingService(
                 fromSchemaId = schemaId,
                 toSchemaId = toSchemaId
             ) ?: throw TransformerNotFoundException(
-                "No transformer found: ${request.schemaId} -> ${request.transformToSchemaId}"
+                "No transformer found for schema:${request.schemaId} -> ${request.transformToSchemaId}"
             )
         }
 
-        ValidationData(
+        return ValidationData(
             topic = topic,
             transformer = transformer,
             targetSchemaId = targetSchemaId

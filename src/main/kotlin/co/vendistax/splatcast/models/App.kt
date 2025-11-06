@@ -1,6 +1,7 @@
 package co.vendistax.splatcast.models
 
 import kotlinx.serialization.Serializable
+import co.vendistax.splatcast.validation.*
 import java.time.Instant
 
 @Serializable
@@ -14,7 +15,17 @@ data class App(
 )
 
 @Serializable
-data class CreateAppRequest(val name: String)
+data class CreateAppRequest(val name: String) {
+    fun validate(): CreateAppRequest {
+        name.validateName("name")
+        return this
+    }
+}
 
 @Serializable
-data class UpdateAppRequest(val name: String)
+data class UpdateAppRequest(val name: String) {
+    fun validate(): UpdateAppRequest {
+        name.validateName("name")
+        return this
+    }
+}

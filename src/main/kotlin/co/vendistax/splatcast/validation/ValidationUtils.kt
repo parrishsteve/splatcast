@@ -1,6 +1,22 @@
 package co.vendistax.splatcast.validation
 
+import co.vendistax.splatcast.database.tables.SchemaStatus
+import co.vendistax.splatcast.services.InvalidSchemaException
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+
 class ValidationException(message: String) : IllegalArgumentException(message)
+
+fun String.validateName(fieldName: String, min: Int = 1, max: Int = 100): String {
+    this.validateRequired(fieldName)
+        .validateLength(fieldName, min, max)
+        .validatePattern(
+            fieldName,
+            Regex("^[a-zA-Z0-9_.-]+$"),
+            "$fieldName can only contain letters, numbers, underscores, hyphens, and periods"
+        )
+    return this
+}
 
 fun String?.validateRequired(fieldName: String): String {
     if (this.isNullOrBlank()) {
@@ -66,4 +82,37 @@ fun <T> Collection<T>.validateSize(fieldName: String, min: Int? = null, max: Int
         }
     }
     return this
+}
+
+fun String.validateSchemaStatus(fieldName: String): SchemaStatus {
+    return SchemaStatus.fromString(this, SchemaStatus.UNKNOWN).also {
+        if (it == SchemaStatus.UNKNOWN) {
+            throw ValidationException("Invalid $fieldName value: $this, allowed values are: ${SchemaStatus.getAllStatuses()}")
+        }
+    }
+}
+
+fun JsonObject.validateJsonSchema() {
+    // Basic JSON Schema validation - check for required fields
+    val hasSchemaField = containsKey("\$schema")
+    val hasTypeField = containsKey("type")
+
+    if (!hasSchemaField && !hasTypeField) {
+        throw InvalidSchemaException(
+            "Invalid JSON Schema: must contain '\$schema' or 'type' field"
+        )
+    }
+
+    // Additional validation: if 'type' exists, it should be a valid JSON Schema type
+    this["type"]?.let { typeElement ->
+        if (typeElement is JsonPrimitive && typeElement.isString) {
+            val typeValue = typeElement.content
+            val validTypes = setOf("object", "array", "string", "number", "integer", "boolean", "null")
+            if (typeValue !in validTypes) {
+                throw InvalidSchemaException(
+                    "Invalid JSON Schema type: $typeValue. Must be one of $validTypes"
+                )
+            }
+        }
+    }
 }

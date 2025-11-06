@@ -1,5 +1,6 @@
 package co.vendistax.splatcast.api.v1.routes
 
+import co.vendistax.splatcast.Config
 import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
 import co.vendistax.splatcast.models.CreateAppRequest
@@ -18,7 +19,7 @@ fun Route.appRoutes(
     appService: AppService,
     logger: Logger = LoggerFactory.getLogger("appRoutes"),
 ) {
-    route("/apps") {
+    route("${Config.BASE_URL}/apps") {
         get {
             try {
                 call.respond(appService.findAll())
@@ -30,7 +31,7 @@ fun Route.appRoutes(
 
         post {
             try {
-                val request = call.receive<CreateAppRequest>()
+                val request = call.receive<CreateAppRequest>().validate()
                 val app = appService.create(request)
                 call.respond(HttpStatusCode.Created, app)
             } catch (e: AppNameAlreadyExistsException) {
@@ -70,7 +71,7 @@ fun Route.appRoutes(
             }
 
             try {
-                val request = call.receive<UpdateAppRequest>()
+                val request = call.receive<UpdateAppRequest>().validate()
                 val app = appService.update(appId, request)
                 call.respond(app)
             } catch (e: AppNotFoundException) {
@@ -105,57 +106,60 @@ fun Route.appRoutes(
             }
         }
 
-        // Name-based routes
-        get("/by-name/{appName}") {
-            val appName = call.parameters["appName"].validateRequired("appName")
+        // Hand-specified routes (using names)
+        route("${Config.BASE_URL}/${Config.NAME_URL_PREFACE}") {
+            get("/{appName}") {
+                val appName = call.parameters["appName"].validateRequired("appName")
 
-            try {
-                val app = appService.findByName(appName)
-                call.respond(app)
-            } catch (e: AppNotFoundException) {
-                call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
-            } catch (e: Exception) {
-                logger.error(e, "Failed to retrieve app with name=$appName")
-                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+                try {
+                    val app = appService.findByName(appName)
+                    call.respond(app)
+                } catch (e: AppNotFoundException) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
+                } catch (e: Exception) {
+                    logger.error(e, "Failed to retrieve app with name=$appName")
+                    call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+                }
             }
-        }
 
-        put("/by-name/{appName}") {
-            val appName = call.parameters["appName"].validateRequired("appName")
+            put("/{appName}") {
+                val appName = call.parameters["appName"].validateRequired("appName")
 
-            try {
-                val existingApp = appService.findByName(appName)
-                val request = call.receive<UpdateAppRequest>()
-                val app = appService.update(existingApp.appId, request)
-                call.respond(app)
-            } catch (e: AppNotFoundException) {
-                call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
-            } catch (e: AppNameAlreadyExistsException) {
-                call.respond(HttpStatusCode.Conflict, mapOf("error" to e.message))
-            } catch (e: IllegalArgumentException) {
-                call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
-            } catch (e: Exception) {
-                logger.error(e, "Failed to update app with name=$appName")
-                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+                try {
+                    val existingApp = appService.findByName(appName)
+                    val request = call.receive<UpdateAppRequest>().validate()
+                    val app = appService.update(existingApp.appId, request)
+                    call.respond(app)
+                } catch (e: AppNotFoundException) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
+                } catch (e: AppNameAlreadyExistsException) {
+                    call.respond(HttpStatusCode.Conflict, mapOf("error" to e.message))
+                } catch (e: IllegalArgumentException) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
+                } catch (e: Exception) {
+                    logger.error(e, "Failed to update app with name=$appName")
+                    call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+                }
             }
-        }
 
-        delete("/by-name/{appName}") {
-            val appName = call.parameters["appName"].validateRequired("appName")
+            delete("/{appName}") {
+                val appName = call.parameters["appName"].validateRequired("appName")
 
-            try {
-                val existingApp = appService.findByName(appName)
-                appService.delete(existingApp.appId)
-                call.respond(HttpStatusCode.NoContent)
-            } catch (e: AppNotFoundException) {
-                call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
-            } catch (e: AppHasTopicsException) {
-                call.respond(HttpStatusCode.Conflict, mapOf("error" to e.message))
-            } catch (e: Exception) {
-                logger.error(e, "Failed to delete app with name=$appName")
-                call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+                try {
+                    val existingApp = appService.findByName(appName)
+                    appService.delete(existingApp.appId)
+                    call.respond(HttpStatusCode.NoContent)
+                } catch (e: AppNotFoundException) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to e.message))
+                } catch (e: AppHasTopicsException) {
+                    call.respond(HttpStatusCode.Conflict, mapOf("error" to e.message))
+                } catch (e: Exception) {
+                    logger.error(e, "Failed to delete app with name=$appName")
+                    call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
+                }
             }
         }
     }
 }
+
 

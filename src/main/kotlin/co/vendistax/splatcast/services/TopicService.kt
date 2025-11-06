@@ -3,7 +3,6 @@ package co.vendistax.splatcast.services
 import co.vendistax.splatcast.database.entities.AppEntity
 import co.vendistax.splatcast.database.entities.QuotaEntity
 import co.vendistax.splatcast.database.entities.TopicEntity
-import co.vendistax.splatcast.database.entities.TransformerEntity
 import co.vendistax.splatcast.database.tables.Quotas
 import co.vendistax.splatcast.database.tables.Schemas
 import co.vendistax.splatcast.database.tables.Topics
@@ -69,7 +68,7 @@ class TopicService(
     }
 
     // Can find by AppId and TopicId or by AppId and TopicName
-    private fun find(where: () -> org.jetbrains.exposed.sql.Op<Boolean>): TopicResponse = transaction {
+    private fun find(where: () -> org.jetbrains.exposed.sql.Op<Boolean>): TopicResponse? = transaction {
         Topics.join(Quotas, JoinType.LEFT, Topics.id, Quotas.topicId)
             .join(Schemas, JoinType.LEFT, Topics.defaultSchemaId, Schemas.id)
             .slice(Topics.columns + Quotas.columns + Schemas.id + Schemas.name)
@@ -86,7 +85,6 @@ class TopicService(
                 topicEntity.toResponse(schemaInfo, quotaEntity)
             }
             .firstOrNull()
-            ?: throw NoSuchElementException("Topic not found")
     }
 
     fun findByAppId(appId: Long): List<TopicResponse> = transaction {
@@ -107,9 +105,13 @@ class TopicService(
             }
     }
 
-    fun findById(appId: Long, topicId: Long): TopicResponse = find { (Topics.id eq topicId) and (Topics.appId eq appId) }
+    fun findById(appId: Long, topicId: Long): TopicResponse {
+        return find { (Topics.id eq topicId) and (Topics.appId eq appId) } ?: throw NoSuchElementException("Topic not found: appId=$appId, topic=$topicId")
+    }
 
-    fun findByAppIdAndName(appId: Long, name: String): TopicResponse = find { (Topics.appId eq appId) and (Topics.name eq name) }
+    fun findByAppIdAndName(appId: Long, name: String): TopicResponse {
+        return find { (Topics.appId eq appId) and (Topics.name eq name) } ?: throw NoSuchElementException("Topic not found: appId=$appId, topic=$name")
+    }
 
     private fun geTopic(
         where: () -> Op<Boolean>

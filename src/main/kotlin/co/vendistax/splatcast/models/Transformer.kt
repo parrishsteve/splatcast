@@ -8,6 +8,7 @@ data class TransformerResponse(
     val id: Long,
     val appId: Long,
     val topicId: Long,
+    val topicName: String,
     val name: String,
     val fromSchemaId: Long?,
     val toSchemaId: Long,
@@ -26,9 +27,9 @@ data class TransformerResponse(
 data class CreateTransformerRequest(
     val name: String,
     val fromSchemaId: Long? = null, // NULL = any schema
-    val toSchemaId: Long,
+    val toSchemaId: Long? = null, // This is actually required but they can alternatively provide toSchemaName
     val fromSchemaName: String? = null, // NULL = any schema
-    val toSchemaName: String,
+    val toSchemaName: String? = null, //  This is actually required but they can alternatively provide toSchemaId
     val code: String,
     val timeoutMs: Int = 50,
     val enabled: Boolean = true,
@@ -37,6 +38,7 @@ data class CreateTransformerRequest(
 
 @Serializable
 data class UpdateTransformerRequest(
+    val name: String,
     val fromSchemaId: Long? = null, // NULL = any schema
     val toSchemaId: Long? = null,
     val fromSchemaName: String? = null,
