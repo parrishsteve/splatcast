@@ -10,6 +10,8 @@ import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
 import org.jetbrains.exposed.sql.transactions.transaction
 import co.vendistax.splatcast.models.*
+import co.vendistax.splatcast.services.facilities.SchemaInfoResult
+import co.vendistax.splatcast.services.facilities.SchemaValidation
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import java.time.OffsetDateTime
@@ -21,7 +23,8 @@ import org.jetbrains.exposed.sql.select
 import kotlin.jvm.Throws
 
 class TopicService(
-    private val schemaValidationService: SchemaValidationService,
+    private val schemaValidation: SchemaValidation,
+    private val quotaService: QuotaService,
     private val logger: Logger = LoggerFactory.getLogger<TopicService>(),
 ) {
     companion object {
@@ -44,14 +47,14 @@ class TopicService(
             throw IllegalArgumentException("Topic name already exists: ${request.name}")
         }
 
-        val schemaInfo = schemaValidationService.getTopicRequestSchemaInfo(appId, request)
+        val schemaInfo = schemaValidation.getTopicRequestSchemaInfo(appId, request)
 
         // Create topic
         val topicEntity = TopicEntity.new {
             this.appId = app.id
             this.name = request.name
             this.description = request.description
-            this.retentionHours = request.retentionHours
+            this.retentionHours = 168 // request.retentionHours DISABLE FOR NOW, can only be set at the broker
             this.defaultSchemaId = schemaInfo?.let { EntityID(it.id, Schemas) }
         }
 
@@ -176,7 +179,7 @@ class TopicService(
         var schemaInfo: SchemaInfoResult? = null
         if (request.defaultSchemaId != null || !request.defaultSchemaName.isNullOrEmpty()) {
             // then validate it
-            schemaInfo = schemaValidationService.getTopicRequestSchemaInfo(appId, request)
+            schemaInfo = schemaValidation.getTopicRequestSchemaInfo(appId, request)
             if (schemaInfo != null) {
                 topicEntity.defaultSchemaId = EntityID(schemaInfo.id, Schemas)
             }
@@ -193,6 +196,7 @@ class TopicService(
 
             quotaEntity.perMinute = quotaSettings.perMinute
             quotaEntity.perDay = quotaSettings.perDay
+            quotaService.invalidateCache(appId, topicId)
         }
 
         val quota = QuotaEntity.find { Quotas.topicId eq topicId }.firstOrNull()
@@ -208,7 +212,7 @@ class TopicService(
             ?: throw NoSuchElementException("Topic not found check IDs")
 
         // Validate if changing default schema
-        val schemaInfo = schemaValidationService.getTopicRequestSchemaInfo(appId, request)
+        val schemaInfo = schemaValidation.getTopicRequestSchemaInfo(appId, request)
             ?: throw IllegalArgumentException("No schema exists specified for topic")
         topicEntity.toResponse(schemaInfo)
     }

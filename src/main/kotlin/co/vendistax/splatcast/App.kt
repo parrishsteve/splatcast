@@ -11,11 +11,13 @@ import co.vendistax.splatcast.services.AppService
 import co.vendistax.splatcast.services.AuditService
 import co.vendistax.splatcast.services.JavaScriptRuntimeService
 import co.vendistax.splatcast.services.PublishingService
+import co.vendistax.splatcast.services.QuotaService
 import co.vendistax.splatcast.services.SchemaService
-import co.vendistax.splatcast.services.SchemaValidationService
+import co.vendistax.splatcast.services.facilities.SchemaValidation
 import co.vendistax.splatcast.services.ServiceDependencies
 import co.vendistax.splatcast.services.TopicService
 import co.vendistax.splatcast.services.TransformerService
+import co.vendistax.splatcast.services.facilities.IdempotencyCache
 import co.vendistax.splatcast.session.SubscriberSessionFactory
 import co.vendistax.splatcast.session.SubscriberSessionHub
 import io.ktor.server.application.*
@@ -23,19 +25,26 @@ import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 
 fun main() {
-    embeddedServer(Netty, port = 8080) {
-        val services = serviceModule()
-        module(serviceDependencies = services)
-    }.start(wait = true)
+    try {
+        embeddedServer(Netty, port = 8080) {
+            val services = serviceModule()
+            module(serviceDependencies = services)
+        }.start(wait = true)
+    } catch (e: Exception) {
+        println("Failed to start server: ${e.message}")
+        e.printStackTrace()
+    }
 }
 
 private fun serviceModule(): ServiceDependencies  {
     val jsRuntime = JavaScriptRuntimeService()
-    val schemaValidationService = SchemaValidationService()
-    val topicService = TopicService(schemaValidationService)
+    val quotaService = QuotaService()
+    val schemaValidation = SchemaValidation()
+    val topicService = TopicService(
+        schemaValidation = schemaValidation, quotaService = quotaService)
     val transformerService = TransformerService(
         jsRuntime = jsRuntime,
-        schemaValidationService = schemaValidationService)
+        schemaValidation = schemaValidation)
     val subscriberSessionFactory = SubscriberSessionFactory(
         topicService = topicService,
         transformerService = transformerService)
@@ -50,9 +59,12 @@ private fun serviceModule(): ServiceDependencies  {
         schemaService = SchemaService(),
         transformerService = transformerService,
         publishingService = PublishingService(
-            schemaValidationService = schemaValidationService,
+            schemaValidation = schemaValidation,
             transformerService = transformerService,
-            queueBusProducer = queueProducer),
+            queueBusProducer = queueProducer,
+            quotaService = quotaService,
+            idempotencyCache = IdempotencyCache(),
+        ),
         subscriberSessionHub = subscriberSessionHub,
     )
 }

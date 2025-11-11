@@ -7,7 +7,7 @@ import co.vendistax.splatcast.validation.*
 data class CreateTopicRequest(
     val name: String,
     val description: String? = null,
-    val retentionHours: Int = 72,
+    val retentionHours: Int = 168,
     val defaultSchemaId: Long? = null,
     val defaultSchemaName: String? = null,
     val quotas: QuotaSettings = QuotaSettings()
@@ -52,7 +52,7 @@ data class TopicResponse(
     val appId: Long,
     val name: String,
     val description: String?,
-    val retentionHours: Int,
+    val retentionHours: Int = 168,
     val defaultSchemaId: Long?,
     val defaultSchemaName: String?,
     val quotas: QuotaSettings,

@@ -1,5 +1,6 @@
 package co.vendistax.splatcast.queue.implementation
 
+import co.vendistax.splatcast.Config
 import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
 import co.vendistax.splatcast.queue.QueueBusConsumer
@@ -11,13 +12,15 @@ import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.serialization.StringDeserializer
 import java.time.Duration
+import java.time.Instant
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
 
 class KafkaQueueConsumer(
-    bootstrapServers: String = "localhost:29092",
-    groupId: String = "splatcast-server",
+    bootstrapServers: String = Config.KAFKA_BOOTSTRAP_SERVERS,
+    groupId: String = Config.KAFKA_GROUP_ID,
     override val channel: QueueChannel,
+    override val fromTimestamp: Long?,
     private val logger: Logger = LoggerFactory.getLogger<KafkaQueueConsumer>()
 ) : QueueBusConsumer {
 
@@ -50,7 +53,42 @@ class KafkaQueueConsumer(
                 val topic = channel.toString()
                 if (consumer == null) {
                     consumer = KafkaConsumer<String, String>(consumerProps).also {
-                        it.subscribe(listOf(topic))
+                        //it.subscribe(listOf(topic))
+                    }
+                    val localConsumer = consumer // TODO Do we need a flow to emit errors?
+
+                    val partitionInfos = localConsumer?.partitionsFor(topic)
+                    val partitions = partitionInfos?.map {
+                        org.apache.kafka.common.TopicPartition(topic, it.partition())
+                    }
+
+                    // Manually assign partitions instead of subscribing
+                    localConsumer?.assign(partitions)
+
+                    // if we have a timestamp to start from, then poll once and seek to that timestamp
+                    if (fromTimestamp != null && localConsumer != null) {
+                        //localConsumer.poll(Duration.ofSeconds(10)) // this is need to get the assignments
+                        //val partitions = localConsumer.assignment()
+                        if (partitions?.isNotEmpty() == true) {
+                            val timestampsToSearch = partitions.associateWith { fromTimestamp }
+                            val offsetsForTimes = localConsumer.offsetsForTimes(timestampsToSearch)
+                            for ((partition, offsetAndTimestamp) in offsetsForTimes) {
+                                if (offsetAndTimestamp != null) {
+                                    localConsumer.seek(partition, offsetAndTimestamp.offset())
+                                    logger.debug {
+                                        "Seeking partition ${partition.partition()} to " +
+                                                "offset ${offsetAndTimestamp.offset()} for timestamp ${fromTimestamp.toString()}"
+                                    }
+                                } else {
+                                    // No offset found for timestamp, seek to beginning
+                                    localConsumer.seekToBeginning(listOf(partition))
+                                    logger.debug {
+                                        "No offset found for partition ${partition.partition()} " +
+                                                "at timestamp ${fromTimestamp.toString()}, seeking to beginning"
+                                    }
+                                }
+                            }
+                        }
                     }
                     startPolling()
                 }

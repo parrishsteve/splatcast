@@ -10,6 +10,7 @@ import co.vendistax.splatcast.database.tables.TransformLang
 import co.vendistax.splatcast.database.tables.Transformers
 import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
+import co.vendistax.splatcast.services.facilities.SchemaValidation
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.JoinType
@@ -24,8 +25,6 @@ import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.security.MessageDigest
 import kotlin.Boolean
-import kotlin.and
-import kotlin.text.get
 
 
 class InvalidTransformCodeException(message: String) : IllegalArgumentException(message)
@@ -38,7 +37,7 @@ class TransformerNotFoundException(message: String) : NoSuchElementException(mes
 
 class TransformerService(
     private val jsRuntime: JavaScriptRuntimeService,
-    private val schemaValidationService: SchemaValidationService,
+    private val schemaValidation: SchemaValidation,
     private val logger: Logger = LoggerFactory.getLogger<TransformerService>(),
 ) {
 
@@ -79,7 +78,7 @@ class TransformerService(
         }
 
         // Convert and validate schema IDs from provided IDs or names
-        val schemaInfo = schemaValidationService.getTransformerRequestSchemaInfo(appId, request)
+        val schemaInfo = schemaValidation.getTransformerRequestSchemaInfo(appId, request)
 
         // Validate JavaScript syntax before saving
         jsRuntime.validateTransformSyntax(request.code)
@@ -366,7 +365,7 @@ class TransformerService(
         }
 
         // Convert and validate schema IDs from provided IDs or names
-        val schemaInfo = schemaValidationService.getTransformerRequestSchemaInfo(appId = topicEntity.appId.value, request)
+        val schemaInfo = schemaValidation.getTransformerRequestSchemaInfo(appId = topicEntity.appId.value, request)
 
         // If code provided, validate and update hash
         request.code?.let { newCode ->

@@ -1,6 +1,5 @@
-package co.vendistax.splatcast.services
+package co.vendistax.splatcast.services.facilities
 
-import co.vendistax.splatcast.database.entities.TransformerEntity
 import co.vendistax.splatcast.database.tables.Schemas
 import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
@@ -10,6 +9,7 @@ import co.vendistax.splatcast.models.PatchTopicRequest
 import co.vendistax.splatcast.models.PublishEventRequest
 import co.vendistax.splatcast.models.UpdateTopicRequest
 import co.vendistax.splatcast.models.UpdateTransformerRequest
+import co.vendistax.splatcast.services.SchemaNotFoundException
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -24,7 +24,7 @@ data class TransformerSchemaInfoResult(
     val to: SchemaInfoResult,
 )
 
-class SchemaValidationService(
+class SchemaValidation(
     val logger: Logger = LoggerFactory.getLogger("SchemaValidationService"),
 ) {
     @Throws(IllegalArgumentException::class, SchemaNotFoundException::class)

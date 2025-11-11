@@ -302,7 +302,13 @@ return newValue;
 # Publishing and Subscribing examples
 
 wscat -c ws://localhost:8080/apps/1/topics/1/subscribe
-wscat -c ws://localhost:8080/apps/by-name/sapp/topics/POS-Orders/subscribe
+wscat -c ws://localhost:8080/apps/by-name/test16/topics/Test-Topic2/subscribe?fromTimestamp=1696166096000
+wscat -c ws://localhost:8080/apps/by-name/test16/topics/Test-Topic2/subscribe?fromTimestamp=2025-11-11T12:34:56Z
+wscat -c ws://localhost:8080/apps/by-name/test16/topics/Test-Topic2/subscribe?fromTimestamp=2023-11-11T09:34:56-05:00 = 11 values
+
+For testing different timestamps tomorrow...
+wscat -c ws://localhost:8080/apps/by-name/test16/topics/Test-Topic2/subscribe?fromTimestamp=2025-11-10T09:30:19.066458855-06:00
+wscat -c ws://localhost:8080/apps/by-name/test16/topics/Test-Topic2/subscribe?fromTimestamp=2025-11-11T09:40:19.066458855-06:00
 
 curl -i -X POST "http://localhost:8080/apps/by-name/test16/topics/Test-Topic2/publish" \
 -H "Authorization: Bearer <TOKEN>" \
@@ -331,14 +337,47 @@ curl -i -X POST "http://localhost:8080/apps/by-name/test16/topics/Test-Topic2/pu
 }'
 
 # TODO
- - WE need indexes on names.
- - Can oy change the name on a transformer? Right now you can't 
  - Should we centralize all route exception handling into StatusPages 
  - Logger enhancements, make structured, add parameters like app, topic, schema, requestId etc.
  - Handle Idempotency-Key
  - Handle Authorization header with Bearer token
  - Add examples for error cases
- - Handle qoutas in publish example
- - Check retension by subscribing after some time
  - Check replay
- - What about 'batch' publishing? support it?
+
+
+
+# 1) By numeric IDs, epoch millis (seek to a specific instant)
+WS GET ws://localhost:8080/apps/123/topics/456/subscribe?fromTimestamp=1696166096000
+# expected: consumer seeks to 2023-10-01T12:34:56Z (epoch millis)
+
+# 2) By numeric IDs, ISO-8601 Zulu
+WS GET ws://localhost:8080/apps/123/topics/456/subscribe?fromTimestamp=2023-10-01T12:34:56Z
+# expected: same as above, parsed from ISO-8601
+
+# 3) By numeric IDs, ISO-8601 with offset
+WS GET ws://localhost:8080/apps/123/topics/456/subscribe?fromTimestamp=2023-10-01T08:34:56-04:00
+# expected: parsed including offset
+
+# 4) By app name + topic name, no timestamp (live tail)
+WS GET ws://localhost:8080/apps/by-name/my-app/topics/events/subscribe
+# expected: subscribe from current/latest offset (no seek)
+
+# 5) With schema selection plus timestamp
+WS GET ws://localhost:8080/apps/123/topics/456/subscribe?schemaId=10&fromTimestamp=1696166096000
+WS GET ws://localhost:8080/apps/by-name/my-app/topics/events/subscribe?schemaName=json&fromTimestamp=2023-10-01T12:34:56Z
+
+# 6) Invalid timestamp (parsing fails) — verifies fallback/error handling
+WS GET ws://localhost:8080/apps/123/topics/456/subscribe?fromTimestamp=not-a-timestamp
+# expected: parseTimestamp returns null -> route proceeds without timestamp (or returns 400 if validated elsewhere)
+
+# 7) Invalid path params (non-numeric IDs) — triggers validation error
+WS GET ws://localhost:8080/apps/abc/topics/xyz/subscribe
+# expected: 400 close reason "Invalid appId or topicId"
+
+# 8) Edge case: epoch seconds instead of millis (verify units)
+WS GET ws://localhost:8080/apps/123/topics/456/subscribe?fromTimestamp=1696166096
+# expected: parsed as 1696166096 (likely wrong unit if code expects millis) — verify behavior
+
+# 9) Large/old timestamp (seek to beginning-ish)
+WS GET ws://localhost:8080/apps/123/topics/456/subscribe?fromTimestamp=0
+# expected: seek to earliest available messages (depending on consumer logic)

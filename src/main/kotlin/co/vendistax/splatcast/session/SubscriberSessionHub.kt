@@ -14,18 +14,25 @@ class SubscriberSessionHub(
     private val sessions = ConcurrentHashMap<String, SubscriberSessionInterface>()
 
     @Throws (TransformerNotFoundException::class, NoSuchElementException::class)
-    fun add(appId: Long, topicId: Long, schemaId: Long? = null, schemaName: String? = null, session: DefaultWebSocketServerSession): String {
+    fun add(
+        appId: Long,
+        topicId: Long,
+        schemaId: Long? = null,
+        schemaName: String? = null,
+        fromTimestamp: Long? = null,
+        session: DefaultWebSocketServerSession): String {
         val id = UUID.randomUUID().toString()
         // The caller could provide both ID and name, but if the ID is provided well that's just faster so prefer that.
         val newSession = when {
             schemaId != null -> subscriberSessionFactory.sessionFactory(
-                appId = appId, topicId = topicId, toSchemaId = schemaId,
+                appId = appId, topicId = topicId, toSchemaId = schemaId, fromTimestamp = fromTimestamp,
                 serverSession = session)
             schemaName != null -> subscriberSessionFactory.sessionFactory(
-                appId = appId, topicId = topicId, toSchemaName = schemaName,
+                appId = appId, topicId = topicId, toSchemaName = schemaName, fromTimestamp = fromTimestamp,
                 serverSession = session)
             else -> subscriberSessionFactory.sessionFactory(
-                appId = appId, topicId = topicId, toSchemaId = null, serverSession = session)
+                appId = appId, topicId = topicId, toSchemaId = null, fromTimestamp = fromTimestamp,
+                serverSession = session)
         }
         newSession.start()
         sessions[id] = newSession
@@ -33,17 +40,24 @@ class SubscriberSessionHub(
     }
 
     @Throws (TransformerNotFoundException::class, NoSuchElementException::class)
-    fun add(appId: Long, topicName: String, schemaId: Long? = null, schemaName: String? = null, session: DefaultWebSocketServerSession): String {
+    fun add(
+        appId: Long,
+        topicName: String,
+        schemaId: Long? = null,
+        schemaName: String? = null,
+        fromTimestamp: Long? = null,
+        session: DefaultWebSocketServerSession): String {
         val id = UUID.randomUUID().toString()
         val newSession = when {
             schemaId != null -> subscriberSessionFactory.sessionFactory(
-                appId = appId, topicName = topicName, toSchemaId = schemaId,
+                appId = appId, topicName = topicName, toSchemaId = schemaId, fromTimestamp = fromTimestamp,
                 serverSession = session)
             schemaName != null -> subscriberSessionFactory.sessionFactory(
-                appId = appId, topicName = topicName, toSchemaName = schemaName,
+                appId = appId, topicName = topicName, toSchemaName = schemaName, fromTimestamp = fromTimestamp,
                 serverSession = session)
             else -> subscriberSessionFactory.sessionFactory(
-                appId = appId, topicName = topicName, toSchemaId = null, serverSession = session)
+                appId = appId, topicName = topicName, toSchemaId = null, fromTimestamp = fromTimestamp,
+                serverSession = session)
         }
         newSession.start()
         sessions[id] = newSession

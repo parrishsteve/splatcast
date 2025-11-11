@@ -10,6 +10,18 @@ import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
+import java.time.Instant
+import java.time.format.DateTimeParseException
+
+@Throws (DateTimeParseException::class)
+private fun parseTimestamp(value: String, logger: Logger): Long? {
+    // Accept epoch millis or ISO-8601
+    return try {
+        value.toLong()
+    } catch (_: NumberFormatException) {
+        Instant.parse(value).toEpochMilli()
+    }
+}
 
 private suspend fun DefaultWebSocketServerSession.handleExceptions(
     e: Exception,
@@ -33,6 +45,10 @@ private suspend fun DefaultWebSocketServerSession.handleExceptions(
             this.close(CloseReason(4005, e.message ?: "App or topic not found"))
             logger.error(e, "App or topic not found: app=$app, topic=$topic")
         }
+        is DateTimeParseException -> {
+            this.close(CloseReason(4000, "Invalid timestamp format, must be epoch in ms or ISO 8601"))
+            logger.error(e, "Invalid timestamp format: app=$app, topic=$topic")
+        }
         else -> {
             this.close(CloseReason(1011, "Internal server error"))
             logger.error(e, "WebSocket error: app=$app, topic=$topic")
@@ -46,6 +62,7 @@ private suspend fun DefaultWebSocketServerSession.handleWebSocketSession(
     topicName: String?,
     targetSchemaId: Long?,
     targetSchemaName: String?,
+    fromTimestamp: Long?,
     subscriberSessionHub: SubscriberSessionHub,
     logger: Logger,
     logAppIdentifier: String,
@@ -59,6 +76,7 @@ private suspend fun DefaultWebSocketServerSession.handleWebSocketSession(
                 topicId = topicId,
                 schemaId = targetSchemaId,
                 schemaName = targetSchemaName,
+                fromTimestamp = fromTimestamp,
                 session = this
             )
         } else {
@@ -67,13 +85,14 @@ private suspend fun DefaultWebSocketServerSession.handleWebSocketSession(
                 topicName = topicName!!,
                 schemaId = targetSchemaId,
                 schemaName = targetSchemaName,
+                fromTimestamp = fromTimestamp,
                 session = this
             )
         }
 
         logger.info {
             "WebSocket connected: session=$sessionId, app=$logAppIdentifier, topic=$logTopicIdentifier, " +
-                    "schemaId=$targetSchemaId, schemaName=$targetSchemaName"
+                    "schemaId=$targetSchemaId, schemaName=$targetSchemaName, fromTimestamp=$fromTimestamp"
         }
 
         for (frame in incoming) {
@@ -111,12 +130,22 @@ fun Route.webSocketRoutes(
         val targetSchemaId = call.request.queryParameters["schemaId"]?.toLongOrNull()
         val targetSchemaName = call.request.queryParameters["schemaName"]
 
+        // Let's be pretty strict with timestamp parsing here
+        val fromTimestamp: Long?
+        try {
+            fromTimestamp = call.request.queryParameters["fromTimestamp"]?.let { parseTimestamp(it, logger) }
+        } catch (e: DateTimeParseException) {
+            handleExceptions(e, logger, appId.toString(), topicId.toString())
+            return@webSocket
+        }
+
         handleWebSocketSession(
             appId = appId,
             topicId = topicId,
             topicName = null,
             targetSchemaId = targetSchemaId,
             targetSchemaName = targetSchemaName,
+            fromTimestamp = fromTimestamp,
             subscriberSessionHub = subscriberSessionHub,
             logger = logger,
             logAppIdentifier = appId.toString(),
@@ -130,6 +159,16 @@ fun Route.webSocketRoutes(
 
         val targetSchemaId = call.request.queryParameters["schemaId"]?.toLongOrNull()
         val targetSchemaName = call.request.queryParameters["schemaName"]
+
+        // Let's be pretty strict with timestamp parsing here
+        val fromTimestamp: Long?
+        try {
+            fromTimestamp = call.request.queryParameters["fromTimestamp"]?.let { parseTimestamp(it, logger) }
+        } catch (e: DateTimeParseException) {
+            handleExceptions(e, logger, appName, topicName)
+            return@webSocket
+        }
+
         val app = appService.findByName(appName)
 
         handleWebSocketSession(
@@ -138,6 +177,7 @@ fun Route.webSocketRoutes(
             topicName = topicName,
             targetSchemaId = targetSchemaId,
             targetSchemaName = targetSchemaName,
+            fromTimestamp = fromTimestamp,
             subscriberSessionHub = subscriberSessionHub,
             logger = logger,
             logAppIdentifier = appName,

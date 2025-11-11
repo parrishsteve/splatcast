@@ -8,6 +8,8 @@ import co.vendistax.splatcast.logging.LoggerFactory
 import co.vendistax.splatcast.models.*
 import co.vendistax.splatcast.queue.QueueBusProducer
 import co.vendistax.splatcast.queue.QueueChannel
+import co.vendistax.splatcast.services.facilities.IdempotencyCache
+import co.vendistax.splatcast.services.facilities.SchemaValidation
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.sql.Op
@@ -16,7 +18,6 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.OffsetDateTime
 import java.util.*
-import kotlin.toString
 
 class SchemaVersionRequiredException(message: String) : IllegalArgumentException(message)
 
@@ -24,10 +25,14 @@ class SchemaMismatchException(message: String) : IllegalArgumentException(messag
 
 class QueuePublishException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
 
+class QuotaExceededException(message: String) : RuntimeException(message)
+
 class PublishingService(
-    private val schemaValidationService: SchemaValidationService,
+    private val schemaValidation: SchemaValidation,
     private val transformerService: TransformerService,
     private val queueBusProducer: QueueBusProducer,
+    private val quotaService: QuotaService,
+    private val idempotencyCache: IdempotencyCache,
     private val logger: Logger = LoggerFactory.getLogger<PublishingService>(),
 ) {
 
@@ -72,6 +77,11 @@ class PublishingService(
         request: PublishEventRequest,
         idempotencyKey: String? = null
     ): PublishEventResponse {
+        // Check cache for duplicate request
+        if (!idempotencyKey.isNullOrEmpty()) {
+            idempotencyCache.get(idempotencyKey)?.let { return it }
+        }
+
         val (eventId, topicId, topicName, transformResult) = transaction {
             val topic = TopicEntity.find { where() }.firstOrNull()
                 ?: throw TransformerNotFoundException("Topic not found for appId=$appId")
@@ -83,18 +93,27 @@ class PublishingService(
             PublishData(eventId, topic.id.value, topic.name, transformResult)
         }
 
+        if (quotaService.checkAndIncrementQuota(appId, topicId).not()) {
+            throw QuotaExceededException("Quota exceeded for appId=$appId, topicId=$topicId, wait and try again later")
+        }
         // Publish after transaction commits
         publishToQueue(appId, topicId, eventId, transformResult.data)
 
         logger.info { "Published event: id=$eventId, topicId=$topicId, topicName=$topicName" }
 
-        return PublishEventResponse(
+        val response = PublishEventResponse(
             eventId = eventId,
             topicId = topicId,
             topicName = topicName,
             publishedAt = OffsetDateTime.now().toString(),
             transformsApplied = transformResult.transformsApplied
         )
+
+        if (!idempotencyKey.isNullOrEmpty()) {
+            idempotencyCache.put(idempotencyKey, response)
+        }
+
+        return response
     }
 
     private data class PublishData(
@@ -103,6 +122,23 @@ class PublishingService(
         val topicName: String,
         val transformResult: TransformResult
     )
+
+    suspend fun batchPublishAsync(
+        appId: Long,
+        topicName: String,
+        request: BatchPublishRequest
+    ): BatchPublishResponse {
+        return batchPublishAsync(
+            appId = appId,
+            topicId = transaction {
+                val topic = TopicEntity.find {
+                    (Topics.name eq topicName) and (Topics.appId eq appId)
+                }.firstOrNull() ?: throw TransformerNotFoundException("Topic not found for appId=$appId, name=$topicName")
+                topic.id.value
+            },
+            request = request
+        )
+    }
 
     suspend fun batchPublishAsync(
         appId: Long,
@@ -162,7 +198,7 @@ class PublishingService(
             throw SchemaVersionRequiredException("The documents Schema ID must be provided in publish request")
         }
 
-        val (schemaId, toSchemaId) = schemaValidationService.getTransformerRequestSchemaInfo(topic.appId.value, request)
+        val (schemaId, toSchemaId) = schemaValidation.getTransformerRequestSchemaInfo(topic.appId.value, request)
         val targetSchemaId = toSchemaId ?: schemaId
 
         // Validate schema version is provided when topic has default schema

@@ -16,11 +16,12 @@ class SubscriberSessionFactory(
         appId: Long,
         topicId: Long,
         toSchemaId: Long? = null,
+        fromTimestamp: Long? = null,
         serverSession: DefaultWebSocketServerSession,
     ): SubscriberSessionInterface {
         val topicEntity = topicService.getTopicEntityById(appId, topicId)
         val channel = QueueChannel(appId.toString(), topicId.toString())
-        val queueBusConsumer = KafkaQueueConsumer(channel = channel)
+        val queueBusConsumer = KafkaQueueConsumer(channel = channel, fromTimestamp = fromTimestamp)
         val transformerEntity = toSchemaId?.let {
             transformerService.getTransformerEntityFromTopic(topicEntity, it)
         }
@@ -38,11 +39,12 @@ class SubscriberSessionFactory(
         appId: Long,
         topicId: Long,
         toSchemaName: String? = null,
+        fromTimestamp: Long? = null,
         serverSession: DefaultWebSocketServerSession,
     ): SubscriberSessionInterface {
         val topicEntity = topicService.getTopicEntityById(appId, topicId)
         val channel = QueueChannel(appId.toString(), topicId.toString())
-        val queueBusConsumer = KafkaQueueConsumer(channel = channel)
+        val queueBusConsumer = KafkaQueueConsumer(channel = channel, fromTimestamp = fromTimestamp)
         val transformerEntity = toSchemaName?.takeIf { it.isNotEmpty() }?.let {
             transformerService.getTransformerEntityFromTopic(topicEntity, it)
         }
@@ -60,11 +62,12 @@ class SubscriberSessionFactory(
         appId: Long,
         topicName: String,
         toSchemaId: Long? = null,
+        fromTimestamp: Long? = null,
         serverSession: DefaultWebSocketServerSession,
     ): SubscriberSessionInterface {
         val topicEntity = topicService.getTopicEntityByName(appId, topicName)
         val channel = QueueChannel(appId.toString(), topicEntity.id.value.toString())
-        val queueBusConsumer = KafkaQueueConsumer(channel = channel)
+        val queueBusConsumer = KafkaQueueConsumer(channel = channel, fromTimestamp = fromTimestamp)
         val transformerEntity = toSchemaId?.let {
             transformerService.getTransformerEntityFromTopic(topicEntity, it)
         }
@@ -82,11 +85,12 @@ class SubscriberSessionFactory(
         appId: Long,
         topicName: String,
         toSchemaName: String? = null,
+        fromTimestamp: Long? = null,
         serverSession: DefaultWebSocketServerSession,
     ): SubscriberSessionInterface {
         val topicEntity = topicService.getTopicEntityByName(appId, topicName)
         val channel = QueueChannel(appId.toString(), topicEntity.id.value.toString())
-        val queueBusConsumer = KafkaQueueConsumer(channel = channel)
+        val queueBusConsumer = KafkaQueueConsumer(channel = channel, fromTimestamp = fromTimestamp)
         val transformerEntity = toSchemaName?.takeIf { it.isNotEmpty() }?.let {
             transformerService.getTransformerEntityFromTopic(topicEntity, it)
         }

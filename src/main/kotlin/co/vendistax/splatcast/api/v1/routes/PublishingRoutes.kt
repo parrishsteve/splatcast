@@ -3,6 +3,7 @@ package co.vendistax.splatcast.api.v1.routes
 import co.vendistax.splatcast.Config
 import co.vendistax.splatcast.logging.Logger
 import co.vendistax.splatcast.logging.LoggerFactory
+import co.vendistax.splatcast.models.BatchPublishRequest
 import co.vendistax.splatcast.models.PublishEventRequest
 import co.vendistax.splatcast.services.*
 import co.vendistax.splatcast.validation.validateRequired
@@ -10,6 +11,7 @@ import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlin.text.get
 
 private suspend fun handleException(
     e: Exception,
@@ -43,6 +45,10 @@ private suspend fun handleException(
             logger.error(e, "Invalid publish request argument: app=$appIdentifier, topic=$topicIdentifier")
             call.respond(HttpStatusCode.BadRequest, mapOf("error" to e.message))
         }
+        is QuotaExceededException -> {
+            logger.error(e, "Quota exceeded: app=$appIdentifier, topic=$topicIdentifier")
+            call.respond(HttpStatusCode.TooManyRequests, mapOf("error" to e.message))
+        }
         else -> {
             logger.error(e, "Failed to publish event: app=$appIdentifier, topic=$topicIdentifier")
             call.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Internal server error"))
@@ -72,6 +78,19 @@ fun Route.eventPublishingRoutes(
                 handleException(e, logger, appId.toString(), topicId.toString(), call)
             }
         }
+        post("/publish/batch") {
+            val appId = call.parameters["appId"].validateRequired("appId").toLong()
+            val topicId = call.parameters["topicId"].validateRequired("topicId").toLong()
+
+            try {
+                val request = call.receive<BatchPublishRequest>()
+
+                val response = eventPublishingService.batchPublishAsync(appId, topicId, request)
+                call.respond(HttpStatusCode.MultiStatus, response)
+            } catch (e: Exception) {
+                handleException(e, logger, appId.toString(), topicId.toString(), call)
+            }
+        }
     }
     route("${Config.BASE_URL}/apps/${Config.NAME_URL_PREFACE}/{appName}/topics/{topicName}") {
 
@@ -81,12 +100,25 @@ fun Route.eventPublishingRoutes(
 
             try {
                 val request = call.receive<PublishEventRequest>()
-                val idempotencyKey = call.request.headers["Idempotency-Key"]
 
                 val app = appService.findByName(appName)
-                val response = eventPublishingService.publishEvent(app.appId, topicName, request, idempotencyKey)
+                val response = eventPublishingService.publishEvent(app.appId, topicName, request)
                 call.respond(HttpStatusCode.Created, response)
             }  catch (e: Exception) {
+                handleException(e, logger, appName, topicName, call)
+            }
+        }
+        post("/publish/batch") {
+            val appName = call.parameters["appName"].validateRequired("appName")
+            val topicName = call.parameters["topicName"].validateRequired("topicName")
+
+            try {
+                val request = call.receive<BatchPublishRequest>()
+
+                val app = appService.findByName(appName)
+                val response = eventPublishingService.batchPublishAsync(app.appId, topicName, request)
+                call.respond(HttpStatusCode.MultiStatus, response)
+            } catch (e: Exception) {
                 handleException(e, logger, appName, topicName, call)
             }
         }
