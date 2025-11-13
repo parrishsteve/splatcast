@@ -1,0 +1,645 @@
+openapi: 3.0.0
+info:
+  title: Splatcast Transformer API
+  version: 1.0.0
+  description: |
+    REST API for managing transformers within topics in the Splatcast system.
+    Transformers allow you to apply JavaScript-based transformations to messages as they flow through topics.
+    Each transformer belongs to a specific topic and can modify message content, headers, or routing.
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+
+tags:
+  - name: Transformers
+    description: Transformer management operations for topics
+
+components:
+  schemas:
+    Transformer:
+      title: Transformer
+      type: object
+      description: Represents a message transformer that processes messages in a topic
+      required:
+        - id
+        - topicId
+        - name
+        - transformCode
+        - enabled
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier for the transformer
+          example: 1
+        topicId:
+          type: integer
+          format: int64
+          description: ID of the topic this transformer belongs to
+          example: 1
+        name:
+          type: string
+          description: Unique name of the transformer within the topic
+          example: "enrich-user-data"
+          minLength: 1
+          maxLength: 255
+        transformCode:
+          type: string
+          description: JavaScript code that performs the transformation
+          example: "function transform(message) { message.enriched = true; return message; }"
+        enabled:
+          type: boolean
+          description: Whether the transformer is currently active
+          example: true
+          default: true
+        createdAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp when the transformer was created
+          example: "2024-01-15T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp when the transformer was last modified
+          example: "2024-01-20T14:45:00Z"
+
+    CreateTransformerRequest:
+      title: Create Transformer Request
+      type: object
+      description: Request payload for creating a new transformer
+      required:
+        - name
+        - transformCode
+      properties:
+        name:
+          type: string
+          description: Unique name for the transformer within the topic
+          example: "enrich-user-data"
+          minLength: 1
+          maxLength: 255
+        transformCode:
+          type: string
+          description: Valid JavaScript code for the transformation function
+          example: "function transform(message) { message.timestamp = Date.now(); return message; }"
+        enabled:
+          type: boolean
+          description: Whether the transformer should be enabled on creation
+          example: true
+          default: true
+
+    UpdateTransformerRequest:
+      title: Update Transformer Request
+      type: object
+      description: Request payload for updating an existing transformer
+      properties:
+        name:
+          type: string
+          description: New unique name for the transformer
+          example: "enrich-user-data-v2"
+          minLength: 1
+          maxLength: 255
+        transformCode:
+          type: string
+          description: Updated JavaScript transformation code
+          example: "function transform(message) { message.version = 2; return message; }"
+        enabled:
+          type: boolean
+          description: Enable or disable the transformer
+          example: false
+
+    ErrorResponse:
+      title: Error Response
+      type: object
+      description: Standard error response
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+          example: "Transformer with name 'enrich-user-data' already exists"
+
+  parameters:
+    appIdParam:
+      name: appId
+      in: path
+      required: true
+      description: Unique numeric identifier of the application
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      example: 1
+
+    topicIdParam:
+      name: topicId
+      in: path
+      required: true
+      description: Unique numeric identifier of the topic
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      example: 1
+
+    transformIdParam:
+      name: transformId
+      in: path
+      required: true
+      description: Unique numeric identifier of the transformer
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      example: 1
+
+    appNameParam:
+      name: appName
+      in: path
+      required: true
+      description: Unique name of the application
+      schema:
+        type: string
+        minLength: 1
+      example: "payment-service"
+
+    topicNameParam:
+      name: topicName
+      in: path
+      required: true
+      description: Unique name of the topic
+      schema:
+        type: string
+        minLength: 1
+      example: "user-events"
+
+    transformerNameParam:
+      name: transformerName
+      in: path
+      required: true
+      description: Unique name of the transformer
+      schema:
+        type: string
+        minLength: 1
+      example: "enrich-user-data"
+
+paths:
+  /api/v1/apps/{appId}/topics/{topicId}/transformers:
+    post:
+      operationId: createTransformer
+      summary: Create a new transformer
+      description: |
+        Creates a new transformer for the specified topic.
+        The transformer name must be unique within the topic.
+        The transform code must be valid JavaScript.
+      tags:
+        - Transformers
+      parameters:
+        - $ref: '#/components/parameters/appIdParam'
+        - $ref: '#/components/parameters/topicIdParam'
+      requestBody:
+        required: true
+        description: Transformer details for creation
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransformerRequest'
+            example:
+              name: "enrich-user-data"
+              transformCode: "function transform(message) { message.enriched = true; return message; }"
+              enabled: true
+      responses:
+        '201':
+          description: Transformer created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transformer'
+              example:
+                id: 1
+                topicId: 1
+                name: "enrich-user-data"
+                transformCode: "function transform(message) { message.enriched = true; return message; }"
+                enabled: true
+                createdAt: "2024-01-17T09:15:00Z"
+                updatedAt: "2024-01-17T09:15:00Z"
+        '400':
+          description: Invalid request - missing required fields or invalid transform code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invalid transform code: syntax error"
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Topic not found with id: 1"
+        '409':
+          description: Transformer with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Transformer with name 'enrich-user-data' already exists"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal server error"
+
+    get:
+      operationId: listTransformers
+      summary: List transformers for a topic
+      description: Retrieves all transformers for the specified topic
+      tags:
+        - Transformers
+      parameters:
+        - $ref: '#/components/parameters/appIdParam'
+        - $ref: '#/components/parameters/topicIdParam'
+      responses:
+        '200':
+          description: Successfully retrieved list of transformers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transformer'
+              example:
+                - id: 1
+                  topicId: 1
+                  name: "enrich-user-data"
+                  transformCode: "function transform(message) { return message; }"
+                  enabled: true
+                  createdAt: "2024-01-15T10:30:00Z"
+                  updatedAt: "2024-01-15T10:30:00Z"
+                - id: 2
+                  topicId: 1
+                  name: "filter-sensitive-data"
+                  transformCode: "function transform(message) { delete message.ssn; return message; }"
+                  enabled: true
+                  createdAt: "2024-01-16T11:00:00Z"
+                  updatedAt: "2024-01-16T11:00:00Z"
+        '400':
+          description: Invalid ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invalid ID format"
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Topic not found with id: 1"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal server error"
+
+  /api/v1/apps/{appId}/topics/{topicId}/transformers/{transformId}:
+    get:
+      operationId: getTransformer
+      summary: Get transformer by ID
+      description: Retrieves detailed information about a specific transformer
+      tags:
+        - Transformers
+      parameters:
+        - $ref: '#/components/parameters/appIdParam'
+        - $ref: '#/components/parameters/topicIdParam'
+        - $ref: '#/components/parameters/transformIdParam'
+      responses:
+        '200':
+          description: Successfully retrieved transformer details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transformer'
+              example:
+                id: 1
+                topicId: 1
+                name: "enrich-user-data"
+                transformCode: "function transform(message) { message.enriched = true; return message; }"
+                enabled: true
+                createdAt: "2024-01-15T10:30:00Z"
+                updatedAt: "2024-01-15T10:30:00Z"
+        '400':
+          description: Invalid ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invalid ID format"
+        '404':
+          description: Transformer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Transformer not found with id: 1"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal server error"
+
+    put:
+      operationId: updateTransformer
+      summary: Update transformer by ID
+      description: |
+        Updates an existing transformer's details.
+        Only provided fields will be updated.
+      tags:
+        - Transformers
+      parameters:
+        - $ref: '#/components/parameters/appIdParam'
+        - $ref: '#/components/parameters/topicIdParam'
+        - $ref: '#/components/parameters/transformIdParam'
+      requestBody:
+        required: true
+        description: Fields to update
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTransformerRequest'
+            example:
+              transformCode: "function transform(message) { message.version = 2; return message; }"
+              enabled: false
+      responses:
+        '200':
+          description: Transformer updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transformer'
+              example:
+                id: 1
+                topicId: 1
+                name: "enrich-user-data"
+                transformCode: "function transform(message) { message.version = 2; return message; }"
+                enabled: false
+                createdAt: "2024-01-15T10:30:00Z"
+                updatedAt: "2024-01-17T14:20:00Z"
+        '400':
+          description: Invalid request - invalid transform code or ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invalid transform code: syntax error"
+        '404':
+          description: Transformer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Transformer not found with id: 1"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal server error"
+
+    delete:
+      operationId: deleteTransformer
+      summary: Delete transformer by ID
+      description: Permanently deletes a transformer
+      tags:
+        - Transformers
+      parameters:
+        - $ref: '#/components/parameters/appIdParam'
+        - $ref: '#/components/parameters/topicIdParam'
+        - $ref: '#/components/parameters/transformIdParam'
+      responses:
+        '204':
+          description: Transformer deleted successfully
+        '400':
+          description: Invalid ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invalid ID format"
+        '404':
+          description: Transformer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Transformer not found with id: 1"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal server error"
+
+  /api/v1/apps/by-name/{appName}/topics/{topicName}/transformers:
+    post:
+      operationId: createTransformerByName
+      summary: Create a new transformer (by names)
+      description: Creates a new transformer using app and topic names
+      tags:
+        - Transformers
+      parameters:
+        - $ref: '#/components/parameters/appNameParam'
+        - $ref: '#/components/parameters/topicNameParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransformerRequest'
+      responses:
+        '201':
+          description: Transformer created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transformer'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: App or topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Transformer with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      operationId: listTransformersByName
+      summary: List transformers for a topic (by names)
+      description: Retrieves all transformers using app and topic names
+      tags:
+        - Transformers
+      parameters:
+        - $ref: '#/components/parameters/appNameParam'
+        - $ref: '#/components/parameters/topicNameParam'
+      responses:
+        '200':
+          description: Successfully retrieved list of transformers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transformer'
+        '404':
+          description: App or topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/apps/by-name/{appName}/topics/{topicName}/transformers/{transformerName}:
+    get:
+      operationId: getTransformerByName
+      summary: Get transformer by name
+      description: Retrieves a transformer using app, topic, and transformer names
+      tags:
+        - Transformers
+      parameters:
+        - $ref: '#/components/parameters/appNameParam'
+        - $ref: '#/components/parameters/topicNameParam'
+        - $ref: '#/components/parameters/transformerNameParam'
+      responses:
+        '200':
+          description: Successfully retrieved transformer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transformer'
+        '404':
+          description: App, topic, or transformer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      operationId: updateTransformerByName
+      summary: Update transformer by name
+      description: Updates a transformer using app, topic, and transformer names
+      tags:
+        - Transformers
+      parameters:
+        - $ref: '#/components/parameters/appNameParam'
+        - $ref: '#/components/parameters/topicNameParam'
+        - $ref: '#/components/parameters/transformerNameParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTransformerRequest'
+      responses:
+        '200':
+          description: Transformer updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transformer'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: App, topic, or transformer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      operationId: deleteTransformerByName
+      summary: Delete transformer by name
+      description: Deletes a transformer using app, topic, and transformer names
+      tags:
+        - Transformers
+      parameters:
+        - $ref: '#/components/parameters/appNameParam'
+        - $ref: '#/components/parameters/topicNameParam'
+        - $ref: '#/components/parameters/transformerNameParam'
+      responses:
+        '204':
+          description: Transformer deleted successfully
+        '404':
+          description: App, topic, or transformer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'

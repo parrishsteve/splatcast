@@ -1,0 +1,11 @@
+package co.vendistax.splatcast.api.v1.docs
+
+import io.ktor.server.application.*
+import io.ktor.server.plugins.openapi.*
+import io.ktor.server.routing.*
+
+fun Application.configureOpenAPI() {
+    routing {
+        openAPI(path = "api-docs", swaggerFile = "openapi/bundled-api-docs.yaml")
+    }
+}

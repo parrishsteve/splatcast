@@ -1,0 +1,3920 @@
+openapi: 3.0.0
+info:
+  title: Splatcast API Documentation
+  version: 1.0.0
+  description: |
+    Complete API documentation for the Splatcast system.
+
+    ## API Categories
+
+    - **Apps API**: Manage applications
+    - **Schemas API**: Manage schemas within applications
+    - **Topics API**: Manage topics within applications
+    - **Transformers API**: Manage transformers within topics
+    - **Publishing API**: Publish json docs to subscribers
+servers:
+  - url: http://localhost:8080
+    description: Development server
+tags:
+  - name: Apps
+    description: Application management endpoints
+  - name: Schemas
+    description: Schema management endpoints
+  - name: Topics
+    description: Topic management endpoints
+  - name: Transformers
+    description: Transformer management endpoints
+  - name: Publishing
+    description: Event publishing endpoints
+paths:
+  /api/v1/apps:
+    get:
+      operationId: listApps
+      summary: List all applications
+      description: |
+        Retrieves a complete list of all applications in the system.
+        Returns an empty array if no applications exist.
+      tags:
+        - Apps
+      responses:
+        '200':
+          description: Successfully retrieved list of applications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  title: Application
+                  type: object
+                  description: Represents an application in the Splatcast system
+                  required: &ref_0
+                    - appId
+                    - appName
+                    - createdAt
+                    - updatedAt
+                  properties: &ref_1
+                    appId:
+                      type: integer
+                      format: int64
+                      description: Unique identifier for the application, auto-generated on creation
+                      example: 1
+                    appName:
+                      type: string
+                      description: Unique name of the application, used for identification and routing
+                      example: payment-service
+                      minLength: 1
+                      maxLength: 255
+                    description:
+                      type: string
+                      nullable: true
+                      description: Optional human-readable description of the application's purpose
+                      example: Handles payment processing and transaction management
+                      maxLength: 1000
+                    createdAt:
+                      type: string
+                      format: date-time
+                      description: ISO 8601 timestamp when the application was first created
+                      example: '2024-01-15T10:30:00Z'
+                    updatedAt:
+                      type: string
+                      format: date-time
+                      description: ISO 8601 timestamp when the application was last modified
+                      example: '2024-01-20T14:45:00Z'
+              example:
+                - appId: 1
+                  appName: payment-service
+                  description: Handles payment processing
+                  createdAt: '2024-01-15T10:30:00Z'
+                  updatedAt: '2024-01-15T10:30:00Z'
+                - appId: 2
+                  appName: user-service
+                  description: User management
+                  createdAt: '2024-01-16T11:00:00Z'
+                  updatedAt: '2024-01-16T11:00:00Z'
+        '500':
+          description: Internal server error occurred while retrieving applications
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: &ref_2
+                  error:
+                    type: string
+                    description: Human-readable error message describing what went wrong
+                    example: Application with name 'user-service' already exists
+              example:
+                error: Database connection failed
+    post:
+      operationId: createApp
+      summary: Create a new application
+      description: |
+        Creates a new application with the specified name and optional description.
+        The application name must be unique across the system.
+      tags:
+        - Apps
+      requestBody:
+        required: true
+        description: Application details for creation
+        content:
+          application/json:
+            schema:
+              title: Create Application Request
+              type: object
+              description: Request payload for creating a new application
+              required: &ref_51
+                - appName
+              properties: &ref_52
+                appName:
+                  type: string
+                  description: |
+                    Unique name for the new application. Must be unique across all applications.
+                    Recommended to use lowercase with hyphens (e.g., 'my-app-name').
+                  example: user-service
+                  minLength: 1
+                  maxLength: 255
+                description:
+                  type: string
+                  nullable: true
+                  description: Optional description providing context about the application's purpose and functionality
+                  example: Service for user authentication and profile management
+                  maxLength: 1000
+            example:
+              appName: notification-service
+              description: Handles email and push notifications
+      responses:
+        '201':
+          description: Application created successfully with auto-generated ID and timestamps
+          content:
+            application/json:
+              schema:
+                title: Application
+                type: object
+                description: Represents an application in the Splatcast system
+                required: *ref_0
+                properties: *ref_1
+              example:
+                appId: 3
+                appName: notification-service
+                description: Handles email and push notifications
+                createdAt: '2024-01-17T09:15:00Z'
+                updatedAt: '2024-01-17T09:15:00Z'
+        '400':
+          description: Invalid request body - missing required fields or invalid format
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: appName is required and cannot be empty
+        '409':
+          description: Application name already exists - names must be unique
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: Application with name 'notification-service' already exists
+        '500':
+          description: Internal server error occurred during application creation
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: Failed to create application in database
+  /api/v1/apps/{appId}:
+    get:
+      operationId: getAppById
+      summary: Get application by ID
+      description: |
+        Retrieves detailed information about a specific application using its numeric ID.
+        Use this endpoint when you have the application's ID from a previous operation.
+      tags:
+        - Apps
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application to retrieve
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          example: 1
+      responses:
+        '200':
+          description: Successfully retrieved application details
+          content:
+            application/json:
+              schema:
+                title: Application
+                type: object
+                description: Represents an application in the Splatcast system
+                required: *ref_0
+                properties: *ref_1
+              example:
+                appId: 1
+                appName: payment-service
+                description: Handles payment processing
+                createdAt: '2024-01-15T10:30:00Z'
+                updatedAt: '2024-01-15T10:30:00Z'
+        '400':
+          description: Invalid appId format - must be a positive integer
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: 'Invalid appId: must be a positive integer'
+        '404':
+          description: Application with the specified ID does not exist
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: 'App not found with id: 999'
+        '500':
+          description: Internal server error occurred while retrieving the application
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: Database query failed
+    put:
+      operationId: updateAppById
+      summary: Update application by ID
+      description: |
+        Updates an existing application's details using its numeric ID.
+        Only provided fields will be updated; omitted fields remain unchanged.
+        The new appName (if provided) must not conflict with existing applications.
+      tags:
+        - Apps
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application to update
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          example: 1
+      requestBody:
+        required: true
+        description: Fields to update. All fields are optional; only include fields you want to change.
+        content:
+          application/json:
+            schema:
+              title: Update Application Request
+              type: object
+              description: Request payload for updating an existing application. All fields are optional; only provided fields will be updated.
+              properties: &ref_3
+                appName:
+                  type: string
+                  description: |
+                    New unique name for the application. Must not conflict with existing application names.
+                    If not provided, the name remains unchanged.
+                  example: user-management-service
+                  minLength: 1
+                  maxLength: 255
+                description:
+                  type: string
+                  nullable: true
+                  description: |
+                    New description for the application. Provide null to clear the description.
+                    If not provided, the description remains unchanged.
+                  example: Enhanced service for user authentication, authorization, and profile management
+                  maxLength: 1000
+            examples:
+              updateNameAndDescription:
+                summary: Update both name and description
+                value:
+                  appName: payment-processing-service
+                  description: Enhanced payment processing with fraud detection
+              updateDescriptionOnly:
+                summary: Update description only
+                value:
+                  description: Updated payment processing service
+              clearDescription:
+                summary: Clear the description
+                value:
+                  description: null
+      responses:
+        '200':
+          description: Application updated successfully with new updatedAt timestamp
+          content:
+            application/json:
+              schema:
+                title: Application
+                type: object
+                description: Represents an application in the Splatcast system
+                required: *ref_0
+                properties: *ref_1
+              example:
+                appId: 1
+                appName: payment-processing-service
+                description: Enhanced payment processing with fraud detection
+                createdAt: '2024-01-15T10:30:00Z'
+                updatedAt: '2024-01-17T14:20:00Z'
+        '400':
+          description: Invalid request - either invalid appId format or invalid request body
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: appName cannot be empty
+        '404':
+          description: Application with the specified ID does not exist
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: 'App not found with id: 999'
+        '409':
+          description: The new appName conflicts with an existing application
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: Application with name 'payment-processing-service' already exists
+        '500':
+          description: Internal server error occurred during update
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: Failed to update application in database
+    delete:
+      operationId: deleteAppById
+      summary: Delete application by ID
+      description: |
+        Permanently deletes an application by its numeric ID.
+        Applications can only be deleted if they have no associated topics.
+        This operation cannot be undone.
+      tags:
+        - Apps
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application to delete
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          example: 1
+      responses:
+        '204':
+          description: Application deleted successfully with no content returned
+        '400':
+          description: Invalid appId format - must be a positive integer
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: 'Invalid appId: must be a positive integer'
+        '404':
+          description: Application with the specified ID does not exist
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: 'App not found with id: 999'
+        '409':
+          description: Application has associated topics and cannot be deleted. Delete all topics first.
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: 'Cannot delete app: it has 5 associated topics'
+        '500':
+          description: Internal server error occurred during deletion
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: Failed to delete application from database
+  /api/v1/apps/by-name/{appName}:
+    get:
+      operationId: getAppByName
+      summary: Get application by name
+      description: |
+        Retrieves detailed information about a specific application using its unique name.
+        Use this endpoint when you know the application name but not its ID.
+      tags:
+        - Apps
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Unique name of the application to retrieve
+          schema:
+            type: string
+            minLength: 1
+          example: payment-service
+      responses:
+        '200':
+          description: Successfully retrieved application details
+          content:
+            application/json:
+              schema:
+                title: Application
+                type: object
+                description: Represents an application in the Splatcast system
+                required: *ref_0
+                properties: *ref_1
+              example:
+                appId: 1
+                appName: payment-service
+                description: Handles payment processing
+                createdAt: '2024-01-15T10:30:00Z'
+                updatedAt: '2024-01-15T10:30:00Z'
+        '404':
+          description: Application with the specified name does not exist
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: 'App not found with name: unknown-service'
+        '500':
+          description: Internal server error occurred while retrieving the application
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: Database query failed
+    put:
+      operationId: updateAppByName
+      summary: Update application by name
+      description: |
+        Updates an existing application's details using its unique name.
+        Only provided fields will be updated; omitted fields remain unchanged.
+        The new appName (if provided) must not conflict with existing applications.
+      tags:
+        - Apps
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Current unique name of the application to update
+          schema:
+            type: string
+            minLength: 1
+          example: payment-service
+      requestBody:
+        required: true
+        description: Fields to update. All fields are optional; only include fields you want to change.
+        content:
+          application/json:
+            schema:
+              title: Update Application Request
+              type: object
+              description: Request payload for updating an existing application. All fields are optional; only provided fields will be updated.
+              properties: *ref_3
+            examples:
+              renameApp:
+                summary: Rename the application
+                value:
+                  appName: payment-processing-service
+              updateDescription:
+                summary: Update description only
+                value:
+                  description: Enhanced payment processing with fraud detection
+      responses:
+        '200':
+          description: Application updated successfully with new updatedAt timestamp
+          content:
+            application/json:
+              schema:
+                title: Application
+                type: object
+                description: Represents an application in the Splatcast system
+                required: *ref_0
+                properties: *ref_1
+              example:
+                appId: 1
+                appName: payment-processing-service
+                description: Enhanced payment processing with fraud detection
+                createdAt: '2024-01-15T10:30:00Z'
+                updatedAt: '2024-01-17T14:20:00Z'
+        '400':
+          description: Invalid request body - empty or malformed data
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: appName cannot be empty
+        '404':
+          description: Application with the specified name does not exist
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: 'App not found with name: unknown-service'
+        '409':
+          description: The new appName conflicts with an existing application
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: Application with name 'payment-processing-service' already exists
+        '500':
+          description: Internal server error occurred during update
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: Failed to update application in database
+    delete:
+      operationId: deleteAppByName
+      summary: Delete application by name
+      description: |
+        Permanently deletes an application by its unique name.
+        Applications can only be deleted if they have no associated topics.
+        This operation cannot be undone.
+      tags:
+        - Apps
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Unique name of the application to delete
+          schema:
+            type: string
+            minLength: 1
+          example: payment-service
+      responses:
+        '204':
+          description: Application deleted successfully with no content returned
+        '404':
+          description: Application with the specified name does not exist
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: 'App not found with name: unknown-service'
+        '409':
+          description: Application has associated topics and cannot be deleted. Delete all topics first.
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: 'Cannot delete app: it has 3 associated topics'
+        '500':
+          description: Internal server error occurred during deletion
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_2
+              example:
+                error: Failed to delete application from database
+  /api/v1/apps/{appId}/schemas:
+    post:
+      operationId: createSchemaById
+      summary: Create a new schema
+      description: |
+        Creates a new schema for the specified application.
+        The schema name must be unique within the application.
+        The schema definition must be valid JSON Schema or Avro schema.
+      tags:
+        - Schemas
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application
+          schema: &ref_5
+            type: integer
+            format: int64
+            minimum: 1
+          example: 1
+      requestBody:
+        required: true
+        description: Schema details for creation
+        content:
+          application/json:
+            schema:
+              title: Create Schema Request
+              type: object
+              description: Request payload for creating a new schema
+              required: &ref_9
+                - name
+                - schemaDefinition
+              properties: &ref_10
+                name:
+                  type: string
+                  description: |
+                    Unique name for the schema within the application.
+                    Must be unique across all schemas in the same app.
+                    Recommended to include version suffix (e.g., 'user-profile-v1').
+                  example: user-profile-v1
+                  minLength: 1
+                  maxLength: 255
+                schemaDefinition:
+                  type: string
+                  description: |
+                    Valid JSON Schema or Avro schema definition as a string.
+                    Must be valid JSON and conform to schema standards.
+                  example: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"}},"required":["userId","email"]}'
+                status:
+                  type: string
+                  enum:
+                    - DRAFT
+                    - ACTIVE
+                  description: |
+                    Initial status for the schema. Defaults to DRAFT if not specified.
+                    Can only be DRAFT or ACTIVE on creation.
+                  example: DRAFT
+                  default: DRAFT
+            examples:
+              draftSchema:
+                summary: Create a draft schema
+                value:
+                  name: user-profile-v1
+                  schemaDefinition: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"}}}'
+                  status: DRAFT
+              activeSchema:
+                summary: Create an active schema
+                value:
+                  name: order-event-v1
+                  schemaDefinition: '{"type":"object","properties":{"orderId":{"type":"string"},"amount":{"type":"number"},"timestamp":{"type":"integer"}},"required":["orderId","amount","timestamp"]}'
+                  status: ACTIVE
+      responses:
+        '201':
+          description: Schema created successfully with auto-generated ID and timestamps
+          content:
+            application/json:
+              schema:
+                title: Schema
+                type: object
+                description: Represents a schema definition for data validation
+                required: &ref_6
+                  - id
+                  - appId
+                  - name
+                  - schemaDefinition
+                  - status
+                  - version
+                  - createdAt
+                  - updatedAt
+                properties: &ref_7
+                  id:
+                    type: integer
+                    format: int64
+                    description: Unique identifier for the schema, auto-generated on creation
+                    example: 1
+                  appId:
+                    type: integer
+                    format: int64
+                    description: ID of the application this schema belongs to
+                    example: 1
+                  name:
+                    type: string
+                    description: Unique name of the schema within the application
+                    example: user-profile-v1
+                    minLength: 1
+                    maxLength: 255
+                  schemaDefinition:
+                    type: string
+                    description: JSON Schema or Avro schema definition as a string
+                    example: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"}}}'
+                  status:
+                    type: string
+                    enum:
+                      - DRAFT
+                      - ACTIVE
+                      - DEPRECATED
+                      - RETIRED
+                    description: |
+                      Current status of the schema:
+                      - DRAFT: Schema is being developed and can be modified
+                      - ACTIVE: Schema is in production use
+                      - DEPRECATED: Schema is being phased out but still usable
+                      - RETIRED: Schema is no longer usable
+                    example: ACTIVE
+                  version:
+                    type: integer
+                    description: Version number of the schema, incremented on updates
+                    example: 1
+                    minimum: 1
+                  createdAt:
+                    type: string
+                    format: date-time
+                    description: ISO 8601 timestamp when the schema was first created
+                    example: '2024-01-15T10:30:00Z'
+                  updatedAt:
+                    type: string
+                    format: date-time
+                    description: ISO 8601 timestamp when the schema was last modified
+                    example: '2024-01-20T14:45:00Z'
+              example:
+                id: 1
+                appId: 1
+                name: user-profile-v1
+                schemaDefinition: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"}}}'
+                status: DRAFT
+                version: 1
+                createdAt: '2024-01-17T09:15:00Z'
+                updatedAt: '2024-01-17T09:15:00Z'
+        '400':
+          description: Invalid request - missing required fields, invalid schema definition, or invalid status
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: &ref_4
+                  error:
+                    type: string
+                    description: Human-readable error message describing what went wrong
+                    example: Schema with name 'user-profile-v1' already exists
+              examples:
+                missingName:
+                  summary: Missing schema name
+                  value:
+                    error: Schema name is required
+                invalidSchema:
+                  summary: Invalid schema definition
+                  value:
+                    error: Schema definition is not valid JSON
+                invalidStatus:
+                  summary: Invalid status for creation
+                  value:
+                    error: Initial status must be DRAFT or ACTIVE
+        '500':
+          description: Internal server error occurred during schema creation
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+              example:
+                error: Internal server error
+    get:
+      operationId: listSchemasByAppId
+      summary: List schemas for an application
+      description: |
+        Retrieves a list of schemas for the specified application.
+        Supports filtering by status and pagination via limit/offset.
+      tags:
+        - Schemas
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application
+          schema: *ref_5
+          example: 1
+        - name: status
+          in: query
+          required: false
+          description: |
+            Filter schemas by status. If not provided, returns schemas of all statuses.
+            Valid values: DRAFT, ACTIVE, DEPRECATED, RETIRED
+          schema: &ref_12
+            type: string
+            enum:
+              - DRAFT
+              - ACTIVE
+              - DEPRECATED
+              - RETIRED
+          example: ACTIVE
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of schemas to return. Defaults to 100.
+          schema: &ref_13
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+          example: 50
+        - name: offset
+          in: query
+          required: false
+          description: Number of schemas to skip for pagination. Defaults to 0.
+          schema: &ref_14
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+      responses:
+        '200':
+          description: Successfully retrieved list of schemas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  title: Schema
+                  type: object
+                  description: Represents a schema definition for data validation
+                  required: *ref_6
+                  properties: *ref_7
+              example:
+                - id: 1
+                  appId: 1
+                  name: user-profile-v1
+                  schemaDefinition: '{"type":"object","properties":{"userId":{"type":"string"}}}'
+                  status: ACTIVE
+                  version: 1
+                  createdAt: '2024-01-15T10:30:00Z'
+                  updatedAt: '2024-01-15T10:30:00Z'
+                - id: 2
+                  appId: 1
+                  name: order-event-v1
+                  schemaDefinition: '{"type":"object","properties":{"orderId":{"type":"string"}}}'
+                  status: DRAFT
+                  version: 1
+                  createdAt: '2024-01-16T11:00:00Z'
+                  updatedAt: '2024-01-16T11:00:00Z'
+        '400':
+          description: Invalid query parameters - invalid status value or pagination parameters
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+              example:
+                error: Invalid status value
+        '500':
+          description: Internal server error occurred while retrieving schemas
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+              example:
+                error: Internal server error
+  /api/v1/apps/{appId}/schemas/{schemaId}:
+    get:
+      operationId: getSchemaById
+      summary: Get schema by ID
+      description: |
+        Retrieves detailed information about a specific schema using its numeric ID.
+        The schema must belong to the specified application.
+      tags:
+        - Schemas
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application
+          schema: *ref_5
+          example: 1
+        - name: schemaId
+          in: path
+          required: true
+          description: Unique numeric identifier of the schema
+          schema: &ref_8
+            type: integer
+            format: int64
+            minimum: 1
+          example: 1
+      responses:
+        '200':
+          description: Successfully retrieved schema details
+          content:
+            application/json:
+              schema:
+                title: Schema
+                type: object
+                description: Represents a schema definition for data validation
+                required: *ref_6
+                properties: *ref_7
+              example:
+                id: 1
+                appId: 1
+                name: user-profile-v1
+                schemaDefinition: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"}}}'
+                status: ACTIVE
+                version: 1
+                createdAt: '2024-01-15T10:30:00Z'
+                updatedAt: '2024-01-15T10:30:00Z'
+        '400':
+          description: Invalid ID format - must be positive integers
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+              example:
+                error: Invalid ID format
+        '404':
+          description: Schema not found for the specified app and schema ID
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+              example:
+                error: 'Schema not found with id: 999'
+        '500':
+          description: Internal server error occurred while retrieving the schema
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+              example:
+                error: Internal server error
+    put:
+      operationId: updateSchemaById
+      summary: Update schema by ID
+      description: |
+        Updates an existing schema's details using its numeric ID.
+        Only provided fields will be updated; omitted fields remain unchanged.
+        Status transitions are validated according to allowed state changes.
+      tags:
+        - Schemas
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application
+          schema: *ref_5
+          example: 1
+        - name: schemaId
+          in: path
+          required: true
+          description: Unique numeric identifier of the schema
+          schema: *ref_8
+          example: 1
+      requestBody:
+        required: true
+        description: Fields to update. All fields are optional; only include fields you want to change.
+        content:
+          application/json:
+            schema:
+              title: Update Schema Request
+              type: object
+              description: |
+                Request payload for updating an existing schema.
+                All fields are optional; only provided fields will be updated.
+                Status transitions have restrictions (e.g., cannot move from RETIRED to ACTIVE).
+              properties: &ref_16
+                name:
+                  type: string
+                  description: |
+                    New unique name for the schema. Must not conflict with existing schema names in the app.
+                    If not provided, the name remains unchanged.
+                  example: user-profile-v2
+                  minLength: 1
+                  maxLength: 255
+                schemaDefinition:
+                  type: string
+                  description: |
+                    Updated schema definition. Must be valid JSON Schema or Avro schema.
+                    If not provided, the definition remains unchanged.
+                  example: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"},"age":{"type":"integer"}},"required":["userId","email"]}'
+                status:
+                  type: string
+                  enum:
+                    - DRAFT
+                    - ACTIVE
+                    - DEPRECATED
+                    - RETIRED
+                  description: |
+                    New status for the schema. Status transitions are validated:
+                    - DRAFT → ACTIVE, RETIRED
+                    - ACTIVE → DEPRECATED, RETIRED
+                    - DEPRECATED → RETIRED
+                    - RETIRED → (no transitions allowed)
+                  example: ACTIVE
+            examples:
+              activateSchema:
+                summary: Activate a draft schema
+                value:
+                  status: ACTIVE
+              updateDefinition:
+                summary: Update schema definition
+                value:
+                  schemaDefinition: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"},"age":{"type":"integer"}}}'
+              deprecateSchema:
+                summary: Deprecate an active schema
+                value:
+                  status: DEPRECATED
+      responses:
+        '200':
+          description: Schema updated successfully with new updatedAt timestamp and incremented version
+          content:
+            application/json:
+              schema:
+                title: Schema
+                type: object
+                description: Represents a schema definition for data validation
+                required: *ref_6
+                properties: *ref_7
+              example:
+                id: 1
+                appId: 1
+                name: user-profile-v1
+                schemaDefinition: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"},"age":{"type":"integer"}}}'
+                status: ACTIVE
+                version: 2
+                createdAt: '2024-01-15T10:30:00Z'
+                updatedAt: '2024-01-17T14:20:00Z'
+        '400':
+          description: Invalid request - invalid schema definition, invalid status transition, or invalid ID format
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+              examples:
+                invalidTransition:
+                  summary: Invalid status transition
+                  value:
+                    error: Cannot transition from RETIRED to ACTIVE
+                invalidDefinition:
+                  summary: Invalid schema definition
+                  value:
+                    error: Schema definition is not valid JSON
+        '404':
+          description: Schema not found for the specified app and schema ID
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+              example:
+                error: 'Schema not found with id: 999'
+        '500':
+          description: Internal server error occurred during update
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+              example:
+                error: Internal server error
+    delete:
+      operationId: deleteSchemaById
+      summary: Delete schema by ID
+      description: |
+        Permanently deletes a schema by its numeric ID.
+        Schemas can only be deleted if they are not referenced by any topics or transformers.
+        This operation cannot be undone.
+      tags:
+        - Schemas
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application
+          schema: *ref_5
+          example: 1
+        - name: schemaId
+          in: path
+          required: true
+          description: Unique numeric identifier of the schema
+          schema: *ref_8
+          example: 1
+      responses:
+        '204':
+          description: Schema deleted successfully with no content returned
+        '400':
+          description: Invalid ID format - must be positive integers
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+              example:
+                error: Invalid ID format
+        '404':
+          description: Schema not found for the specified app and schema ID
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+              example:
+                error: 'Schema not found with id: 999'
+        '409':
+          description: Schema is in use and cannot be deleted. Remove references first.
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+              example:
+                error: 'Cannot delete schema: it is referenced by 3 topics'
+        '500':
+          description: Internal server error occurred during deletion
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+              example:
+                error: Internal server error
+  /api/v1/apps/by-name/{appName}/schemas:
+    post:
+      operationId: createSchemaByName
+      summary: Create a new schema (by app name)
+      description: |
+        Creates a new schema for the specified application using the app's name.
+        The schema name must be unique within the application.
+        The schema definition must be valid JSON Schema or Avro schema.
+      tags:
+        - Schemas
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Unique name of the application
+          schema: &ref_11
+            type: string
+            minLength: 1
+          example: payment-service
+      requestBody:
+        required: true
+        description: Schema details for creation
+        content:
+          application/json:
+            schema:
+              title: Create Schema Request
+              type: object
+              description: Request payload for creating a new schema
+              required: *ref_9
+              properties: *ref_10
+            example:
+              name: user-profile-v1
+              schemaDefinition: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"}}}'
+              status: DRAFT
+      responses:
+        '201':
+          description: Schema created successfully
+          content:
+            application/json:
+              schema:
+                title: Schema
+                type: object
+                description: Represents a schema definition for data validation
+                required: *ref_6
+                properties: *ref_7
+        '400':
+          description: Invalid request - missing required fields, invalid schema definition, or invalid status
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+        '404':
+          description: Application not found with the specified name
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+              example:
+                error: 'App not found with name: unknown-service'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+    get:
+      operationId: listSchemasByAppName
+      summary: List schemas for an application (by app name)
+      description: |
+        Retrieves a list of schemas for the specified application using the app's name.
+        Supports filtering by status and pagination.
+      tags:
+        - Schemas
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Unique name of the application
+          schema: *ref_11
+          example: payment-service
+        - name: status
+          in: query
+          required: false
+          description: |
+            Filter schemas by status. If not provided, returns schemas of all statuses.
+            Valid values: DRAFT, ACTIVE, DEPRECATED, RETIRED
+          schema: *ref_12
+          example: ACTIVE
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of schemas to return. Defaults to 100.
+          schema: *ref_13
+          example: 50
+        - name: offset
+          in: query
+          required: false
+          description: Number of schemas to skip for pagination. Defaults to 0.
+          schema: *ref_14
+          example: 0
+      responses:
+        '200':
+          description: Successfully retrieved list of schemas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  title: Schema
+                  type: object
+                  description: Represents a schema definition for data validation
+                  required: *ref_6
+                  properties: *ref_7
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+        '404':
+          description: Application not found with the specified name
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+  /api/v1/apps/by-name/{appName}/schemas/{schemaName}:
+    get:
+      operationId: getSchemaByName
+      summary: Get schema by name
+      description: |
+        Retrieves detailed information about a specific schema using both the app name and schema name.
+        Useful when you know the names but not the numeric IDs.
+      tags:
+        - Schemas
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Unique name of the application
+          schema: *ref_11
+          example: payment-service
+        - name: schemaName
+          in: path
+          required: true
+          description: Unique name of the schema within the application
+          schema: &ref_15
+            type: string
+            minLength: 1
+          example: user-profile-v1
+      responses:
+        '200':
+          description: Successfully retrieved schema details
+          content:
+            application/json:
+              schema:
+                title: Schema
+                type: object
+                description: Represents a schema definition for data validation
+                required: *ref_6
+                properties: *ref_7
+        '404':
+          description: Application or schema not found with the specified names
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+              examples:
+                appNotFound:
+                  summary: Application not found
+                  value:
+                    error: 'App not found with name: unknown-service'
+                schemaNotFound:
+                  summary: Schema not found
+                  value:
+                    error: 'Schema not found with name: unknown-schema'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+    put:
+      operationId: updateSchemaByName
+      summary: Update schema by name
+      description: |
+        Updates an existing schema using both the app name and schema name.
+        Only provided fields will be updated; omitted fields remain unchanged.
+        Status transitions are validated.
+      tags:
+        - Schemas
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Unique name of the application
+          schema: *ref_11
+          example: payment-service
+        - name: schemaName
+          in: path
+          required: true
+          description: Unique name of the schema within the application
+          schema: *ref_15
+          example: user-profile-v1
+      requestBody:
+        required: true
+        description: Fields to update
+        content:
+          application/json:
+            schema:
+              title: Update Schema Request
+              type: object
+              description: |
+                Request payload for updating an existing schema.
+                All fields are optional; only provided fields will be updated.
+                Status transitions have restrictions (e.g., cannot move from RETIRED to ACTIVE).
+              properties: *ref_16
+            example:
+              status: ACTIVE
+              schemaDefinition: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"},"age":{"type":"integer"}}}'
+      responses:
+        '200':
+          description: Schema updated successfully
+          content:
+            application/json:
+              schema:
+                title: Schema
+                type: object
+                description: Represents a schema definition for data validation
+                required: *ref_6
+                properties: *ref_7
+        '400':
+          description: Invalid request - invalid schema definition or status transition
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+        '404':
+          description: Application or schema not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+    delete:
+      operationId: deleteSchemaByName
+      summary: Delete schema by name
+      description: |
+        Permanently deletes a schema using both the app name and schema name.
+        Schemas can only be deleted if they are not referenced by any topics or transformers.
+      tags:
+        - Schemas
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Unique name of the application
+          schema: *ref_11
+          example: payment-service
+        - name: schemaName
+          in: path
+          required: true
+          description: Unique name of the schema within the application
+          schema: *ref_15
+          example: user-profile-v1
+      responses:
+        '204':
+          description: Schema deleted successfully
+        '404':
+          description: Application or schema not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+        '409':
+          description: Schema is in use and cannot be deleted
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+              example:
+                error: 'Cannot delete schema: it is referenced by topics'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                properties: *ref_4
+  /api/v1/apps/{appId}/topics:
+    get:
+      operationId: listTopicsByAppId
+      summary: List topics for an application
+      description: Retrieves all topics for a specific application, optionally filtered by name
+      tags:
+        - Topics
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The application ID
+        - name: name
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter topics by name
+      responses:
+        '200':
+          description: List of topics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  title: Topic
+                  type: object
+                  description: Represents a topic within an application
+                  required: &ref_19
+                    - topicId
+                    - appId
+                    - name
+                  properties: &ref_20
+                    topicId:
+                      type: integer
+                      format: int64
+                      description: Unique identifier for the topic
+                      example: 123
+                    appId:
+                      type: integer
+                      format: int64
+                      description: ID of the application this topic belongs to
+                      example: 456
+                    name:
+                      type: string
+                      description: Name of the topic
+                      example: user-events
+                    schemaId:
+                      type: integer
+                      format: int64
+                      description: ID of the schema associated with this topic
+                      nullable: true
+                      example: 789
+        '400':
+          description: Invalid appId format
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: &ref_17
+                  - message
+                properties: &ref_18
+                  message:
+                    type: string
+                    description: Error message describing what went wrong
+                    example: Topic not found
+                  timestamp:
+                    type: string
+                    format: date-time
+                    description: Timestamp when the error occurred
+                    example: '2024-01-15T10:30:00Z'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+    post:
+      operationId: createTopicById
+      summary: Create a new topic
+      description: Creates a new topic for a specific application
+      tags:
+        - Topics
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The application ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              title: Create Topic Request
+              type: object
+              required: &ref_21
+                - name
+              properties: &ref_22
+                name:
+                  type: string
+                  description: Name of the topic to create
+                  example: user-events
+                schemaId:
+                  type: integer
+                  format: int64
+                  description: Optional schema ID to associate with the topic
+                  nullable: true
+                  example: 789
+      responses:
+        '201':
+          description: Topic created successfully
+          content:
+            application/json:
+              schema:
+                title: Topic
+                type: object
+                description: Represents a topic within an application
+                required: *ref_19
+                properties: *ref_20
+        '400':
+          description: Invalid request or schema not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+  /api/v1/apps/{appId}/topics/{topicId}:
+    get:
+      operationId: getTopicById
+      summary: Get topic by ID
+      description: Retrieves a specific topic by its ID
+      tags:
+        - Topics
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The application ID
+        - name: topicId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The topic ID
+      responses:
+        '200':
+          description: Topic details
+          content:
+            application/json:
+              schema:
+                title: Topic
+                type: object
+                description: Represents a topic within an application
+                required: *ref_19
+                properties: *ref_20
+        '400':
+          description: Invalid ID format
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+    put:
+      operationId: updateTopicById
+      summary: Update topic by ID
+      description: Updates an existing topic by its ID
+      tags:
+        - Topics
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The application ID
+        - name: topicId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The topic ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              title: Update Topic Request
+              type: object
+              required: &ref_23
+                - name
+              properties: &ref_24
+                name:
+                  type: string
+                  description: Updated name for the topic
+                  example: user-activity-events
+                schemaId:
+                  type: integer
+                  format: int64
+                  description: Updated schema ID
+                  nullable: true
+                  example: 790
+      responses:
+        '200':
+          description: Topic updated successfully
+          content:
+            application/json:
+              schema:
+                title: Topic
+                type: object
+                description: Represents a topic within an application
+                required: *ref_19
+                properties: *ref_20
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+    patch:
+      operationId: patchTopicById
+      summary: Partially update topic by ID
+      description: Partially updates an existing topic by its ID
+      tags:
+        - Topics
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The application ID
+        - name: topicId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The topic ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              title: Patch Topic Request
+              type: object
+              description: Partial update request for a topic
+              properties: &ref_25
+                name:
+                  type: string
+                  description: Updated name for the topic
+                  nullable: true
+                  example: user-activity-events
+                schemaId:
+                  type: integer
+                  format: int64
+                  description: Updated schema ID
+                  nullable: true
+                  example: 790
+      responses:
+        '200':
+          description: Topic updated successfully
+          content:
+            application/json:
+              schema:
+                title: Topic
+                type: object
+                description: Represents a topic within an application
+                required: *ref_19
+                properties: *ref_20
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+    delete:
+      operationId: deleteTopicById
+      summary: Delete topic by ID
+      description: Deletes a topic by its ID
+      tags:
+        - Topics
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The application ID
+        - name: topicId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The topic ID
+      responses:
+        '204':
+          description: Topic deleted successfully
+        '400':
+          description: Invalid ID format
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+  /api/v1/apps/by-name/{appName}/topics:
+    get:
+      operationId: listTopicsByAppName
+      summary: List topics for an application (by app name)
+      description: Retrieves all topics for a specific application by name, optionally filtered by topic name
+      tags:
+        - Topics
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The application name
+        - name: name
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter topics by name
+      responses:
+        '200':
+          description: List of topics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  title: Topic
+                  type: object
+                  description: Represents a topic within an application
+                  required: *ref_19
+                  properties: *ref_20
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+    post:
+      operationId: createTopicByName
+      summary: Create a new topic (by app name)
+      description: Creates a new topic for a specific application by name
+      tags:
+        - Topics
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The application name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              title: Create Topic Request
+              type: object
+              required: *ref_21
+              properties: *ref_22
+      responses:
+        '201':
+          description: Topic created successfully
+          content:
+            application/json:
+              schema:
+                title: Topic
+                type: object
+                description: Represents a topic within an application
+                required: *ref_19
+                properties: *ref_20
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+  /api/v1/apps/by-name/{appName}/topics/{topicName}:
+    get:
+      operationId: getTopicByName
+      summary: Get topic by name
+      description: Retrieves a specific topic by its name
+      tags:
+        - Topics
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The application name
+        - name: topicName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The topic name
+      responses:
+        '200':
+          description: Topic details
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  title: Topic
+                  type: object
+                  description: Represents a topic within an application
+                  required: *ref_19
+                  properties: *ref_20
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+    put:
+      operationId: updateTopicByName
+      summary: Update topic by name
+      description: Updates an existing topic by its name
+      tags:
+        - Topics
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The application name
+        - name: topicName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The topic name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              title: Update Topic Request
+              type: object
+              required: *ref_23
+              properties: *ref_24
+      responses:
+        '200':
+          description: Topic updated successfully
+          content:
+            application/json:
+              schema:
+                title: Topic
+                type: object
+                description: Represents a topic within an application
+                required: *ref_19
+                properties: *ref_20
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+    patch:
+      operationId: patchTopicByName
+      summary: Partially update topic by name
+      description: Partially updates an existing topic by its name
+      tags:
+        - Topics
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The application name
+        - name: topicName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The topic name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              title: Patch Topic Request
+              type: object
+              description: Partial update request for a topic
+              properties: *ref_25
+      responses:
+        '200':
+          description: Topic updated successfully
+          content:
+            application/json:
+              schema:
+                title: Topic
+                type: object
+                description: Represents a topic within an application
+                required: *ref_19
+                properties: *ref_20
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+    delete:
+      operationId: deleteTopicByName
+      summary: Delete topic by name
+      description: Deletes a topic by its name
+      tags:
+        - Topics
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The application name
+        - name: topicName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The topic name
+      responses:
+        '204':
+          description: Topic deleted successfully
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response returned when an operation fails
+                required: *ref_17
+                properties: *ref_18
+  /api/v1/apps/{appId}/topics/{topicId}/transformers:
+    post:
+      operationId: createTransformer
+      summary: Create a new transformer
+      description: |
+        Creates a new transformer for the specified topic.
+        The transformer name must be unique within the topic.
+        The transform code must be valid JavaScript.
+      tags:
+        - Transformers
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application
+          schema: &ref_27
+            type: integer
+            format: int64
+            minimum: 1
+          example: 1
+        - name: topicId
+          in: path
+          required: true
+          description: Unique numeric identifier of the topic
+          schema: &ref_28
+            type: integer
+            format: int64
+            minimum: 1
+          example: 1
+      requestBody:
+        required: true
+        description: Transformer details for creation
+        content:
+          application/json:
+            schema:
+              title: Create Transformer Request
+              type: object
+              description: Request payload for creating a new transformer
+              required: &ref_32
+                - name
+                - transformCode
+              properties: &ref_33
+                name:
+                  type: string
+                  description: Unique name for the transformer within the topic
+                  example: enrich-user-data
+                  minLength: 1
+                  maxLength: 255
+                transformCode:
+                  type: string
+                  description: Valid JavaScript code for the transformation function
+                  example: function transform(message) { message.timestamp = Date.now(); return message; }
+                enabled:
+                  type: boolean
+                  description: Whether the transformer should be enabled on creation
+                  example: true
+                  default: true
+            example:
+              name: enrich-user-data
+              transformCode: function transform(message) { message.enriched = true; return message; }
+              enabled: true
+      responses:
+        '201':
+          description: Transformer created successfully
+          content:
+            application/json:
+              schema:
+                title: Transformer
+                type: object
+                description: Represents a message transformer that processes messages in a topic
+                required: &ref_29
+                  - id
+                  - topicId
+                  - name
+                  - transformCode
+                  - enabled
+                  - createdAt
+                  - updatedAt
+                properties: &ref_30
+                  id:
+                    type: integer
+                    format: int64
+                    description: Unique identifier for the transformer
+                    example: 1
+                  topicId:
+                    type: integer
+                    format: int64
+                    description: ID of the topic this transformer belongs to
+                    example: 1
+                  name:
+                    type: string
+                    description: Unique name of the transformer within the topic
+                    example: enrich-user-data
+                    minLength: 1
+                    maxLength: 255
+                  transformCode:
+                    type: string
+                    description: JavaScript code that performs the transformation
+                    example: function transform(message) { message.enriched = true; return message; }
+                  enabled:
+                    type: boolean
+                    description: Whether the transformer is currently active
+                    example: true
+                    default: true
+                  createdAt:
+                    type: string
+                    format: date-time
+                    description: ISO 8601 timestamp when the transformer was created
+                    example: '2024-01-15T10:30:00Z'
+                  updatedAt:
+                    type: string
+                    format: date-time
+                    description: ISO 8601 timestamp when the transformer was last modified
+                    example: '2024-01-20T14:45:00Z'
+              example:
+                id: 1
+                topicId: 1
+                name: enrich-user-data
+                transformCode: function transform(message) { message.enriched = true; return message; }
+                enabled: true
+                createdAt: '2024-01-17T09:15:00Z'
+                updatedAt: '2024-01-17T09:15:00Z'
+        '400':
+          description: Invalid request - missing required fields or invalid transform code
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: &ref_26
+                  error:
+                    type: string
+                    description: Human-readable error message
+                    example: Transformer with name 'enrich-user-data' already exists
+              example:
+                error: 'Invalid transform code: syntax error'
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+              example:
+                error: 'Topic not found with id: 1'
+        '409':
+          description: Transformer with this name already exists
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+              example:
+                error: Transformer with name 'enrich-user-data' already exists
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+              example:
+                error: Internal server error
+    get:
+      operationId: listTransformers
+      summary: List transformers for a topic
+      description: Retrieves all transformers for the specified topic
+      tags:
+        - Transformers
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application
+          schema: *ref_27
+          example: 1
+        - name: topicId
+          in: path
+          required: true
+          description: Unique numeric identifier of the topic
+          schema: *ref_28
+          example: 1
+      responses:
+        '200':
+          description: Successfully retrieved list of transformers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  title: Transformer
+                  type: object
+                  description: Represents a message transformer that processes messages in a topic
+                  required: *ref_29
+                  properties: *ref_30
+              example:
+                - id: 1
+                  topicId: 1
+                  name: enrich-user-data
+                  transformCode: function transform(message) { return message; }
+                  enabled: true
+                  createdAt: '2024-01-15T10:30:00Z'
+                  updatedAt: '2024-01-15T10:30:00Z'
+                - id: 2
+                  topicId: 1
+                  name: filter-sensitive-data
+                  transformCode: function transform(message) { delete message.ssn; return message; }
+                  enabled: true
+                  createdAt: '2024-01-16T11:00:00Z'
+                  updatedAt: '2024-01-16T11:00:00Z'
+        '400':
+          description: Invalid ID format
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+              example:
+                error: Invalid ID format
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+              example:
+                error: 'Topic not found with id: 1'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+              example:
+                error: Internal server error
+  /api/v1/apps/{appId}/topics/{topicId}/transformers/{transformId}:
+    get:
+      operationId: getTransformer
+      summary: Get transformer by ID
+      description: Retrieves detailed information about a specific transformer
+      tags:
+        - Transformers
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application
+          schema: *ref_27
+          example: 1
+        - name: topicId
+          in: path
+          required: true
+          description: Unique numeric identifier of the topic
+          schema: *ref_28
+          example: 1
+        - name: transformId
+          in: path
+          required: true
+          description: Unique numeric identifier of the transformer
+          schema: &ref_31
+            type: integer
+            format: int64
+            minimum: 1
+          example: 1
+      responses:
+        '200':
+          description: Successfully retrieved transformer details
+          content:
+            application/json:
+              schema:
+                title: Transformer
+                type: object
+                description: Represents a message transformer that processes messages in a topic
+                required: *ref_29
+                properties: *ref_30
+              example:
+                id: 1
+                topicId: 1
+                name: enrich-user-data
+                transformCode: function transform(message) { message.enriched = true; return message; }
+                enabled: true
+                createdAt: '2024-01-15T10:30:00Z'
+                updatedAt: '2024-01-15T10:30:00Z'
+        '400':
+          description: Invalid ID format
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+              example:
+                error: Invalid ID format
+        '404':
+          description: Transformer not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+              example:
+                error: 'Transformer not found with id: 1'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+              example:
+                error: Internal server error
+    put:
+      operationId: updateTransformer
+      summary: Update transformer by ID
+      description: |
+        Updates an existing transformer's details.
+        Only provided fields will be updated.
+      tags:
+        - Transformers
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application
+          schema: *ref_27
+          example: 1
+        - name: topicId
+          in: path
+          required: true
+          description: Unique numeric identifier of the topic
+          schema: *ref_28
+          example: 1
+        - name: transformId
+          in: path
+          required: true
+          description: Unique numeric identifier of the transformer
+          schema: *ref_31
+          example: 1
+      requestBody:
+        required: true
+        description: Fields to update
+        content:
+          application/json:
+            schema:
+              title: Update Transformer Request
+              type: object
+              description: Request payload for updating an existing transformer
+              properties: &ref_37
+                name:
+                  type: string
+                  description: New unique name for the transformer
+                  example: enrich-user-data-v2
+                  minLength: 1
+                  maxLength: 255
+                transformCode:
+                  type: string
+                  description: Updated JavaScript transformation code
+                  example: function transform(message) { message.version = 2; return message; }
+                enabled:
+                  type: boolean
+                  description: Enable or disable the transformer
+                  example: false
+            example:
+              transformCode: function transform(message) { message.version = 2; return message; }
+              enabled: false
+      responses:
+        '200':
+          description: Transformer updated successfully
+          content:
+            application/json:
+              schema:
+                title: Transformer
+                type: object
+                description: Represents a message transformer that processes messages in a topic
+                required: *ref_29
+                properties: *ref_30
+              example:
+                id: 1
+                topicId: 1
+                name: enrich-user-data
+                transformCode: function transform(message) { message.version = 2; return message; }
+                enabled: false
+                createdAt: '2024-01-15T10:30:00Z'
+                updatedAt: '2024-01-17T14:20:00Z'
+        '400':
+          description: Invalid request - invalid transform code or ID format
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+              example:
+                error: 'Invalid transform code: syntax error'
+        '404':
+          description: Transformer not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+              example:
+                error: 'Transformer not found with id: 1'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+              example:
+                error: Internal server error
+    delete:
+      operationId: deleteTransformer
+      summary: Delete transformer by ID
+      description: Permanently deletes a transformer
+      tags:
+        - Transformers
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application
+          schema: *ref_27
+          example: 1
+        - name: topicId
+          in: path
+          required: true
+          description: Unique numeric identifier of the topic
+          schema: *ref_28
+          example: 1
+        - name: transformId
+          in: path
+          required: true
+          description: Unique numeric identifier of the transformer
+          schema: *ref_31
+          example: 1
+      responses:
+        '204':
+          description: Transformer deleted successfully
+        '400':
+          description: Invalid ID format
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+              example:
+                error: Invalid ID format
+        '404':
+          description: Transformer not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+              example:
+                error: 'Transformer not found with id: 1'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+              example:
+                error: Internal server error
+  /api/v1/apps/by-name/{appName}/topics/{topicName}/transformers:
+    post:
+      operationId: createTransformerByName
+      summary: Create a new transformer (by names)
+      description: Creates a new transformer using app and topic names
+      tags:
+        - Transformers
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Unique name of the application
+          schema: &ref_34
+            type: string
+            minLength: 1
+          example: payment-service
+        - name: topicName
+          in: path
+          required: true
+          description: Unique name of the topic
+          schema: &ref_35
+            type: string
+            minLength: 1
+          example: user-events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              title: Create Transformer Request
+              type: object
+              description: Request payload for creating a new transformer
+              required: *ref_32
+              properties: *ref_33
+      responses:
+        '201':
+          description: Transformer created successfully
+          content:
+            application/json:
+              schema:
+                title: Transformer
+                type: object
+                description: Represents a message transformer that processes messages in a topic
+                required: *ref_29
+                properties: *ref_30
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+        '404':
+          description: App or topic not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+        '409':
+          description: Transformer with this name already exists
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+    get:
+      operationId: listTransformersByName
+      summary: List transformers for a topic (by names)
+      description: Retrieves all transformers using app and topic names
+      tags:
+        - Transformers
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Unique name of the application
+          schema: *ref_34
+          example: payment-service
+        - name: topicName
+          in: path
+          required: true
+          description: Unique name of the topic
+          schema: *ref_35
+          example: user-events
+      responses:
+        '200':
+          description: Successfully retrieved list of transformers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  title: Transformer
+                  type: object
+                  description: Represents a message transformer that processes messages in a topic
+                  required: *ref_29
+                  properties: *ref_30
+        '404':
+          description: App or topic not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+  /api/v1/apps/by-name/{appName}/topics/{topicName}/transformers/{transformerName}:
+    get:
+      operationId: getTransformerByName
+      summary: Get transformer by name
+      description: Retrieves a transformer using app, topic, and transformer names
+      tags:
+        - Transformers
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Unique name of the application
+          schema: *ref_34
+          example: payment-service
+        - name: topicName
+          in: path
+          required: true
+          description: Unique name of the topic
+          schema: *ref_35
+          example: user-events
+        - name: transformerName
+          in: path
+          required: true
+          description: Unique name of the transformer
+          schema: &ref_36
+            type: string
+            minLength: 1
+          example: enrich-user-data
+      responses:
+        '200':
+          description: Successfully retrieved transformer
+          content:
+            application/json:
+              schema:
+                title: Transformer
+                type: object
+                description: Represents a message transformer that processes messages in a topic
+                required: *ref_29
+                properties: *ref_30
+        '404':
+          description: App, topic, or transformer not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+    put:
+      operationId: updateTransformerByName
+      summary: Update transformer by name
+      description: Updates a transformer using app, topic, and transformer names
+      tags:
+        - Transformers
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Unique name of the application
+          schema: *ref_34
+          example: payment-service
+        - name: topicName
+          in: path
+          required: true
+          description: Unique name of the topic
+          schema: *ref_35
+          example: user-events
+        - name: transformerName
+          in: path
+          required: true
+          description: Unique name of the transformer
+          schema: *ref_36
+          example: enrich-user-data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              title: Update Transformer Request
+              type: object
+              description: Request payload for updating an existing transformer
+              properties: *ref_37
+      responses:
+        '200':
+          description: Transformer updated successfully
+          content:
+            application/json:
+              schema:
+                title: Transformer
+                type: object
+                description: Represents a message transformer that processes messages in a topic
+                required: *ref_29
+                properties: *ref_30
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+        '404':
+          description: App, topic, or transformer not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+    delete:
+      operationId: deleteTransformerByName
+      summary: Delete transformer by name
+      description: Deletes a transformer using app, topic, and transformer names
+      tags:
+        - Transformers
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Unique name of the application
+          schema: *ref_34
+          example: payment-service
+        - name: topicName
+          in: path
+          required: true
+          description: Unique name of the topic
+          schema: *ref_35
+          example: user-events
+        - name: transformerName
+          in: path
+          required: true
+          description: Unique name of the transformer
+          schema: *ref_36
+          example: enrich-user-data
+      responses:
+        '204':
+          description: Transformer deleted successfully
+        '404':
+          description: App, topic, or transformer not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_26
+  /api/v1/apps/{appId}/topics/{topicId}/publish:
+    post:
+      operationId: publishEvent
+      summary: Publish a single event
+      description: |
+        Publishes a single event to the specified topic.
+        Supports schema validation, transformations, and idempotency.
+      tags:
+        - Publishing
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application
+          schema: &ref_39
+            type: integer
+            format: int64
+            minimum: 1
+          example: 1
+        - name: topicId
+          in: path
+          required: true
+          description: Unique numeric identifier of the topic
+          schema: &ref_40
+            type: integer
+            format: int64
+            minimum: 1
+          example: 1
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: |
+            Optional idempotency key to prevent duplicate event publishing.
+            If the same key is used within the idempotency window, the original response is returned.
+          schema: &ref_53
+            type: string
+          example: key_abc123def456
+      requestBody:
+        required: true
+        description: Event details to publish
+        content:
+          application/json:
+            schema:
+              title: Publish Event Request
+              type: object
+              description: Request payload for publishing a single event to a topic
+              required: &ref_41
+                - payload
+              properties: &ref_42
+                payload:
+                  type: object
+                  description: The event data to publish (JSON object)
+                  example:
+                    userId: user123
+                    action: login
+                    timestamp: 1705491600
+                headers:
+                  type: object
+                  description: Optional custom headers for the event
+                  additionalProperties:
+                    type: string
+                  example:
+                    source: web-app
+                    version: '1.0'
+                schemaVersion:
+                  type: integer
+                  description: Optional specific schema version to validate against
+                  example: 2
+                  minimum: 1
+            example:
+              payload:
+                userId: user123
+                action: login
+                timestamp: 1705491600
+              headers:
+                source: web-app
+                version: '1.0'
+      responses:
+        '201':
+          description: Event published successfully
+          content:
+            application/json:
+              schema:
+                title: Publish Event Response
+                type: object
+                description: Response after successfully publishing an event
+                required: &ref_43
+                  - eventId
+                  - topicId
+                  - publishedAt
+                properties: &ref_44
+                  eventId:
+                    type: string
+                    description: Unique identifier for the published event
+                    example: evt_1234567890abcdef
+                  topicId:
+                    type: integer
+                    format: int64
+                    description: ID of the topic where the event was published
+                    example: 1
+                  publishedAt:
+                    type: string
+                    format: date-time
+                    description: ISO 8601 timestamp when the event was published
+                    example: '2024-01-17T10:00:00Z'
+                  idempotencyKey:
+                    type: string
+                    description: Idempotency key used for this publish (if provided)
+                    example: key_abc123
+              example:
+                eventId: evt_1234567890abcdef
+                topicId: 1
+                publishedAt: '2024-01-17T10:00:00Z'
+                idempotencyKey: key_abc123
+        '400':
+          description: Invalid request - missing payload or invalid data
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: &ref_38
+                  error:
+                    type: string
+                    description: Human-readable error message
+                    example: Schema validation failed
+              example:
+                error: Schema version required
+        '404':
+          description: Topic, schema, or transformer not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+              example:
+                error: 'Topic not found with id: 1'
+        '406':
+          description: Schema validation failed
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+              example:
+                error: Payload does not match schema version 2
+        '429':
+          description: Rate limit or quota exceeded
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+              example:
+                error: Publishing quota exceeded for this topic
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+              example:
+                error: Internal server error
+        '503':
+          description: Service unavailable - queue publish failed
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+              example:
+                error: Failed to publish to queue
+  /api/v1/apps/{appId}/topics/{topicId}/publish/batch:
+    post:
+      operationId: batchPublishEvents
+      summary: Publish multiple events in batch
+      description: |
+        Publishes multiple events to the specified topic in a single request.
+        Returns individual results for each event with a summary.
+        Maximum 1000 events per batch.
+      tags:
+        - Publishing
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application
+          schema: *ref_39
+          example: 1
+        - name: topicId
+          in: path
+          required: true
+          description: Unique numeric identifier of the topic
+          schema: *ref_40
+          example: 1
+      requestBody:
+        required: true
+        description: Batch of events to publish
+        content:
+          application/json:
+            schema:
+              title: Batch Publish Request
+              type: object
+              description: Request payload for publishing multiple events in a batch
+              required: &ref_47
+                - events
+              properties: &ref_48
+                events:
+                  type: array
+                  description: Array of events to publish
+                  minItems: 1
+                  maxItems: 1000
+                  items:
+                    type: object
+                    required:
+                      - payload
+                    properties:
+                      payload:
+                        type: object
+                        description: The event data
+                      headers:
+                        type: object
+                        description: Optional custom headers
+                        additionalProperties:
+                          type: string
+                      schemaVersion:
+                        type: integer
+                        description: Optional schema version
+                      idempotencyKey:
+                        type: string
+                        description: Optional idempotency key for this specific event
+                  example:
+                    - payload:
+                        userId: user123
+                        action: login
+                      headers:
+                        source: web-app
+                    - payload:
+                        userId: user456
+                        action: logout
+                      idempotencyKey: key_xyz789
+            example:
+              events:
+                - payload:
+                    userId: user123
+                    action: login
+                  headers:
+                    source: web-app
+                - payload:
+                    userId: user456
+                    action: logout
+                  idempotencyKey: key_xyz789
+                - payload:
+                    userId: user789
+                    action: purchase
+                  schemaVersion: 2
+      responses:
+        '207':
+          description: Batch processed with mixed results (Multi-Status)
+          content:
+            application/json:
+              schema:
+                title: Batch Publish Response
+                type: object
+                description: Response after batch publishing with individual results
+                required: &ref_49
+                  - results
+                  - summary
+                properties: &ref_50
+                  results:
+                    type: array
+                    description: Individual results for each event in the batch
+                    items:
+                      type: object
+                      required:
+                        - index
+                        - success
+                      properties:
+                        index:
+                          type: integer
+                          description: Index of the event in the original request array
+                          example: 0
+                        success:
+                          type: boolean
+                          description: Whether this event was published successfully
+                          example: true
+                        eventId:
+                          type: string
+                          description: Event ID if successful
+                          example: evt_abc123
+                        error:
+                          type: string
+                          description: Error message if failed
+                          example: Schema validation failed
+                        publishedAt:
+                          type: string
+                          format: date-time
+                          description: Timestamp if successful
+                          example: '2024-01-17T10:00:00Z'
+                  summary:
+                    type: object
+                    required:
+                      - total
+                      - successful
+                      - failed
+                    properties:
+                      total:
+                        type: integer
+                        description: Total number of events in the batch
+                        example: 10
+                      successful:
+                        type: integer
+                        description: Number of successfully published events
+                        example: 9
+                      failed:
+                        type: integer
+                        description: Number of failed events
+                        example: 1
+                    example:
+                      total: 10
+                      successful: 9
+                      failed: 1
+              example:
+                results:
+                  - index: 0
+                    success: true
+                    eventId: evt_abc123
+                    publishedAt: '2024-01-17T10:00:00Z'
+                  - index: 1
+                    success: false
+                    error: Schema validation failed
+                  - index: 2
+                    success: true
+                    eventId: evt_def456
+                    publishedAt: '2024-01-17T10:00:01Z'
+                summary:
+                  total: 3
+                  successful: 2
+                  failed: 1
+        '400':
+          description: Invalid batch request - missing events or exceeds limit
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+              example:
+                error: Batch size exceeds maximum of 1000 events
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+              example:
+                error: 'Topic not found with id: 1'
+        '429':
+          description: Rate limit or quota exceeded
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+              example:
+                error: Publishing quota exceeded
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+              example:
+                error: Internal server error
+  /api/v1/apps/by-name/{appName}/topics/{topicName}/publish:
+    post:
+      operationId: publishEventByName
+      summary: Publish a single event (by names)
+      description: Publishes a single event using app and topic names
+      tags:
+        - Publishing
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Unique name of the application
+          schema: &ref_45
+            type: string
+            minLength: 1
+          example: payment-service
+        - name: topicName
+          in: path
+          required: true
+          description: Unique name of the topic
+          schema: &ref_46
+            type: string
+            minLength: 1
+          example: user-events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              title: Publish Event Request
+              type: object
+              description: Request payload for publishing a single event to a topic
+              required: *ref_41
+              properties: *ref_42
+      responses:
+        '201':
+          description: Event published successfully
+          content:
+            application/json:
+              schema:
+                title: Publish Event Response
+                type: object
+                description: Response after successfully publishing an event
+                required: *ref_43
+                properties: *ref_44
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+        '404':
+          description: App, topic, schema, or transformer not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+        '406':
+          description: Schema validation failed
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+        '429':
+          description: Rate limit or quota exceeded
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+        '503':
+          description: Service unavailable
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+  /api/v1/apps/by-name/{appName}/topics/{topicName}/publish/batch:
+    post:
+      operationId: batchPublishEventsByName
+      summary: Publish multiple events in batch (by names)
+      description: Publishes multiple events using app and topic names
+      tags:
+        - Publishing
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Unique name of the application
+          schema: *ref_45
+          example: payment-service
+        - name: topicName
+          in: path
+          required: true
+          description: Unique name of the topic
+          schema: *ref_46
+          example: user-events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              title: Batch Publish Request
+              type: object
+              description: Request payload for publishing multiple events in a batch
+              required: *ref_47
+              properties: *ref_48
+      responses:
+        '207':
+          description: Batch processed with mixed results
+          content:
+            application/json:
+              schema:
+                title: Batch Publish Response
+                type: object
+                description: Response after batch publishing with individual results
+                required: *ref_49
+                properties: *ref_50
+        '400':
+          description: Invalid batch request
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+        '404':
+          description: App or topic not found
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+        '429':
+          description: Rate limit or quota exceeded
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                title: Error Response
+                type: object
+                description: Standard error response
+                properties: *ref_38
+components:
+  schemas:
+    App:
+      title: Application
+      type: object
+      description: Represents an application in the Splatcast system
+      required: *ref_0
+      properties: *ref_1
+    CreateAppRequest:
+      title: Create Application Request
+      type: object
+      description: Request payload for creating a new application
+      required: *ref_51
+      properties: *ref_52
+    UpdateAppRequest:
+      title: Update Application Request
+      type: object
+      description: Request payload for updating an existing application. All fields are optional; only provided fields will be updated.
+      properties: *ref_3
+    Schema:
+      title: Schema
+      type: object
+      description: Represents a schema definition for data validation
+      required: *ref_6
+      properties: *ref_7
+    CreateSchemaRequest:
+      title: Create Schema Request
+      type: object
+      description: Request payload for creating a new schema
+      required: *ref_9
+      properties: *ref_10
+    UpdateSchemaRequest:
+      title: Update Schema Request
+      type: object
+      description: |
+        Request payload for updating an existing schema.
+        All fields are optional; only provided fields will be updated.
+        Status transitions have restrictions (e.g., cannot move from RETIRED to ACTIVE).
+      properties: *ref_16
+    Topic:
+      title: Topic
+      type: object
+      description: Represents a topic within an application
+      required: *ref_19
+      properties: *ref_20
+    CreateTopicRequest:
+      title: Create Topic Request
+      type: object
+      required: *ref_21
+      properties: *ref_22
+    UpdateTopicRequest:
+      title: Update Topic Request
+      type: object
+      required: *ref_23
+      properties: *ref_24
+    PatchTopicRequest:
+      title: Patch Topic Request
+      type: object
+      description: Partial update request for a topic
+      properties: *ref_25
+    Transformer:
+      title: Transformer
+      type: object
+      description: Represents a message transformer that processes messages in a topic
+      required: *ref_29
+      properties: *ref_30
+    CreateTransformerRequest:
+      title: Create Transformer Request
+      type: object
+      description: Request payload for creating a new transformer
+      required: *ref_32
+      properties: *ref_33
+    UpdateTransformerRequest:
+      title: Update Transformer Request
+      type: object
+      description: Request payload for updating an existing transformer
+      properties: *ref_37
+    PublishEventRequest:
+      title: Publish Event Request
+      type: object
+      description: Request payload for publishing a single event to a topic
+      required: *ref_41
+      properties: *ref_42
+    PublishEventResponse:
+      title: Publish Event Response
+      type: object
+      description: Response after successfully publishing an event
+      required: *ref_43
+      properties: *ref_44
+    BatchPublishRequest:
+      title: Batch Publish Request
+      type: object
+      description: Request payload for publishing multiple events in a batch
+      required: *ref_47
+      properties: *ref_48
+    BatchPublishResponse:
+      title: Batch Publish Response
+      type: object
+      description: Response after batch publishing with individual results
+      required: *ref_49
+      properties: *ref_50
+    ErrorResponse:
+      title: Error Response
+      type: object
+      description: Standard error response returned when an operation fails
+      properties: *ref_2
+    schemas-ErrorResponse:
+      title: Error Response
+      type: object
+      description: Standard error response returned when an operation fails
+      properties: *ref_4
+    components-schemas-ErrorResponse:
+      title: Error Response
+      type: object
+      description: Standard error response returned when an operation fails
+      required: *ref_17
+      properties: *ref_18
+    transformer-api_components-schemas-ErrorResponse:
+      title: Error Response
+      type: object
+      description: Standard error response
+      properties: *ref_26
+    publishing-api_components-schemas-ErrorResponse:
+      title: Error Response
+      type: object
+      description: Standard error response
+      properties: *ref_38
+  parameters:
+    appIdParam:
+      name: appId
+      in: path
+      required: true
+      description: Unique numeric identifier of the application
+      schema: *ref_39
+      example: 1
+    schemaIdParam:
+      name: schemaId
+      in: path
+      required: true
+      description: Unique numeric identifier of the schema
+      schema: *ref_8
+      example: 1
+    appNameParam:
+      name: appName
+      in: path
+      required: true
+      description: Unique name of the application
+      schema: *ref_45
+      example: payment-service
+    schemaNameParam:
+      name: schemaName
+      in: path
+      required: true
+      description: Unique name of the schema within the application
+      schema: *ref_15
+      example: user-profile-v1
+    topicIdParam:
+      name: topicId
+      in: path
+      required: true
+      description: Unique numeric identifier of the topic
+      schema: *ref_40
+      example: 1
+    transformIdParam:
+      name: transformId
+      in: path
+      required: true
+      description: Unique numeric identifier of the transformer
+      schema: *ref_31
+      example: 1
+    topicNameParam:
+      name: topicName
+      in: path
+      required: true
+      description: Unique name of the topic
+      schema: *ref_46
+      example: user-events
+    transformerNameParam:
+      name: transformerName
+      in: path
+      required: true
+      description: Unique name of the transformer
+      schema: *ref_36
+      example: enrich-user-data
+    statusQueryParam:
+      name: status
+      in: query
+      required: false
+      description: |
+        Filter schemas by status. If not provided, returns schemas of all statuses.
+        Valid values: DRAFT, ACTIVE, DEPRECATED, RETIRED
+      schema: *ref_12
+      example: ACTIVE
+    limitQueryParam:
+      name: limit
+      in: query
+      required: false
+      description: Maximum number of schemas to return. Defaults to 100.
+      schema: *ref_13
+      example: 50
+    offsetQueryParam:
+      name: offset
+      in: query
+      required: false
+      description: Number of schemas to skip for pagination. Defaults to 0.
+      schema: *ref_14
+      example: 0
+    idempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        Optional idempotency key to prevent duplicate event publishing.
+        If the same key is used within the idempotency window, the original response is returned.
+      schema: *ref_53
+      example: key_abc123def456
