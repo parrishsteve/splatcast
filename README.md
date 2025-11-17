@@ -1,7 +1,8 @@
 # API Usage Examples
 
 ## Apps API examples
-
+TODO
+<!--
 /*
 curl -i -X GET http://localhost:8080/apps
 curl -i -X GET http://localhost:8080/apps/1
@@ -382,3 +383,4 @@ WS GET ws://localhost:8080/apps/123/topics/456/subscribe?fromTimestamp=169616609
 # 9) Large/old timestamp (seek to beginning-ish)
 WS GET ws://localhost:8080/apps/123/topics/456/subscribe?fromTimestamp=0
 # expected: seek to earliest available messages (depending on consumer logic)
+-->
