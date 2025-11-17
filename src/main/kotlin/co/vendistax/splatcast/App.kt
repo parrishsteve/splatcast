@@ -1,5 +1,6 @@
 package co.vendistax.splatcast
 
+import co.vendistax.splatcast.api.v1.docs.configureOpenAPI
 import co.vendistax.splatcast.plugins.configureDatabase
 import co.vendistax.splatcast.plugins.configureRoutes
 import co.vendistax.splatcast.plugins.configureSerialization
@@ -75,4 +76,5 @@ fun Application.module(serviceDependencies: ServiceDependencies) {
     configureSerialization()
     configureWebsockets()
     configureRoutes(serviceDependencies)
+    configureOpenAPI()
 }

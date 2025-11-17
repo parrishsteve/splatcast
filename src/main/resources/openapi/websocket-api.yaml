@@ -1,0 +1,120 @@
+openapi: 3.0.0
+info:
+  title: Splatcast WebSocket API
+  version: 1.0.0
+  description: WebSocket endpoints for real-time topic subscription
+
+servers:
+  - url: ws://localhost:8080/api/v1
+    description: Development server
+
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+    WebSocketMessage:
+      type: object
+      properties:
+        key:
+          type: string
+          nullable: true
+        value:
+          type: object
+        timestamp:
+          type: integer
+          format: int64
+        offset:
+          type: integer
+          format: int64
+
+paths:
+  /apps/{appId}/topics/{topicId}/subscribe:
+    get:
+      summary: Subscribe to a topic by ID
+      description: WebSocket endpoint to subscribe to real-time messages from a specific topic
+      tags:
+        - WebSocket
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Application ID
+        - name: topicId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Topic ID
+        - name: schemaId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Target schema ID for transformation
+        - name: schemaName
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Target schema name for transformation
+        - name: fromTimestamp
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Start consuming from this timestamp (epoch millis or ISO-8601)
+      responses:
+        '101':
+          description: WebSocket connection established
+
+  /apps/by-name/{appName}/topics/{topicName}/subscribe:
+    get:
+      summary: Subscribe to a topic by name
+      description: WebSocket endpoint to subscribe to real-time messages from a topic using app and topic names
+      tags:
+        - WebSocket
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Application name
+        - name: topicName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Topic name
+        - name: schemaId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Target schema ID for transformation
+        - name: schemaName
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Target schema name for transformation
+        - name: fromTimestamp
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Start consuming from this timestamp (epoch millis or ISO-8601)
+      responses:
+        '101':
+          description: WebSocket connection established

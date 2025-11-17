@@ -1,0 +1,532 @@
+openapi: 3.0.0
+info:
+  title: Splatcast Publishing API
+  version: 1.0.0
+  description: |
+    REST API for publishing events to topics in the Splatcast system.
+    Supports both single event publishing and batch publishing with schema validation,
+    transformations, and idempotency controls.
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+
+tags:
+  - name: Publishing
+    description: Event publishing operations for topics
+
+components:
+  schemas:
+    PublishEventRequest:
+      title: Publish Event Request
+      type: object
+      description: Request payload for publishing a single event to a topic
+      required:
+        - payload
+      properties:
+        payload:
+          type: object
+          description: The event data to publish (JSON object)
+          example:
+            userId: "user123"
+            action: "login"
+            timestamp: 1705491600
+        headers:
+          type: object
+          description: Optional custom headers for the event
+          additionalProperties:
+            type: string
+          example:
+            source: "web-app"
+            version: "1.0"
+        schemaVersion:
+          type: integer
+          description: Optional specific schema version to validate against
+          example: 2
+          minimum: 1
+
+    PublishEventResponse:
+      title: Publish Event Response
+      type: object
+      description: Response after successfully publishing an event
+      required:
+        - eventId
+        - topicId
+        - publishedAt
+      properties:
+        eventId:
+          type: string
+          description: Unique identifier for the published event
+          example: "evt_1234567890abcdef"
+        topicId:
+          type: integer
+          format: int64
+          description: ID of the topic where the event was published
+          example: 1
+        publishedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp when the event was published
+          example: "2024-01-17T10:00:00Z"
+        idempotencyKey:
+          type: string
+          description: Idempotency key used for this publish (if provided)
+          example: "key_abc123"
+
+    BatchPublishRequest:
+      title: Batch Publish Request
+      type: object
+      description: Request payload for publishing multiple events in a batch
+      required:
+        - events
+      properties:
+        events:
+          type: array
+          description: Array of events to publish
+          minItems: 1
+          maxItems: 1000
+          items:
+            type: object
+            required:
+              - payload
+            properties:
+              payload:
+                type: object
+                description: The event data
+              headers:
+                type: object
+                description: Optional custom headers
+                additionalProperties:
+                  type: string
+              schemaVersion:
+                type: integer
+                description: Optional schema version
+              idempotencyKey:
+                type: string
+                description: Optional idempotency key for this specific event
+          example:
+            - payload:
+                userId: "user123"
+                action: "login"
+              headers:
+                source: "web-app"
+            - payload:
+                userId: "user456"
+                action: "logout"
+              idempotencyKey: "key_xyz789"
+
+    BatchPublishResponse:
+      title: Batch Publish Response
+      type: object
+      description: Response after batch publishing with individual results
+      required:
+        - results
+        - summary
+      properties:
+        results:
+          type: array
+          description: Individual results for each event in the batch
+          items:
+            type: object
+            required:
+              - index
+              - success
+            properties:
+              index:
+                type: integer
+                description: Index of the event in the original request array
+                example: 0
+              success:
+                type: boolean
+                description: Whether this event was published successfully
+                example: true
+              eventId:
+                type: string
+                description: Event ID if successful
+                example: "evt_abc123"
+              error:
+                type: string
+                description: Error message if failed
+                example: "Schema validation failed"
+              publishedAt:
+                type: string
+                format: date-time
+                description: Timestamp if successful
+                example: "2024-01-17T10:00:00Z"
+        summary:
+          type: object
+          required:
+            - total
+            - successful
+            - failed
+          properties:
+            total:
+              type: integer
+              description: Total number of events in the batch
+              example: 10
+            successful:
+              type: integer
+              description: Number of successfully published events
+              example: 9
+            failed:
+              type: integer
+              description: Number of failed events
+              example: 1
+          example:
+            total: 10
+            successful: 9
+            failed: 1
+
+    ErrorResponse:
+      title: Error Response
+      type: object
+      description: Standard error response
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+          example: "Schema validation failed"
+
+  parameters:
+    appIdParam:
+      name: appId
+      in: path
+      required: true
+      description: Unique numeric identifier of the application
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      example: 1
+
+    topicIdParam:
+      name: topicId
+      in: path
+      required: true
+      description: Unique numeric identifier of the topic
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      example: 1
+
+    appNameParam:
+      name: appName
+      in: path
+      required: true
+      description: Unique name of the application
+      schema:
+        type: string
+        minLength: 1
+      example: "payment-service"
+
+    topicNameParam:
+      name: topicName
+      in: path
+      required: true
+      description: Unique name of the topic
+      schema:
+        type: string
+        minLength: 1
+      example: "user-events"
+
+    idempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        Optional idempotency key to prevent duplicate event publishing.
+        If the same key is used within the idempotency window, the original response is returned.
+      schema:
+        type: string
+      example: "key_abc123def456"
+
+paths:
+  /api/v1/apps/{appId}/topics/{topicId}/publish:
+    post:
+      operationId: publishEvent
+      summary: Publish a single event
+      description: |
+        Publishes a single event to the specified topic.
+        Supports schema validation, transformations, and idempotency.
+      tags:
+        - Publishing
+      parameters:
+        - $ref: '#/components/parameters/appIdParam'
+        - $ref: '#/components/parameters/topicIdParam'
+        - $ref: '#/components/parameters/idempotencyKeyHeader'
+      requestBody:
+        required: true
+        description: Event details to publish
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishEventRequest'
+            example:
+              payload:
+                userId: "user123"
+                action: "login"
+                timestamp: 1705491600
+              headers:
+                source: "web-app"
+                version: "1.0"
+      responses:
+        '201':
+          description: Event published successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishEventResponse'
+              example:
+                eventId: "evt_1234567890abcdef"
+                topicId: 1
+                publishedAt: "2024-01-17T10:00:00Z"
+                idempotencyKey: "key_abc123"
+        '400':
+          description: Invalid request - missing payload or invalid data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Schema version required"
+        '404':
+          description: Topic, schema, or transformer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Topic not found with id: 1"
+        '406':
+          description: Schema validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Payload does not match schema version 2"
+        '429':
+          description: Rate limit or quota exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Publishing quota exceeded for this topic"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal server error"
+        '503':
+          description: Service unavailable - queue publish failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Failed to publish to queue"
+
+  /api/v1/apps/{appId}/topics/{topicId}/publish/batch:
+    post:
+      operationId: batchPublishEvents
+      summary: Publish multiple events in batch
+      description: |
+        Publishes multiple events to the specified topic in a single request.
+        Returns individual results for each event with a summary.
+        Maximum 1000 events per batch.
+      tags:
+        - Publishing
+      parameters:
+        - $ref: '#/components/parameters/appIdParam'
+        - $ref: '#/components/parameters/topicIdParam'
+      requestBody:
+        required: true
+        description: Batch of events to publish
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchPublishRequest'
+            example:
+              events:
+                - payload:
+                    userId: "user123"
+                    action: "login"
+                  headers:
+                    source: "web-app"
+                - payload:
+                    userId: "user456"
+                    action: "logout"
+                  idempotencyKey: "key_xyz789"
+                - payload:
+                    userId: "user789"
+                    action: "purchase"
+                  schemaVersion: 2
+      responses:
+        '207':
+          description: Batch processed with mixed results (Multi-Status)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchPublishResponse'
+              example:
+                results:
+                  - index: 0
+                    success: true
+                    eventId: "evt_abc123"
+                    publishedAt: "2024-01-17T10:00:00Z"
+                  - index: 1
+                    success: false
+                    error: "Schema validation failed"
+                  - index: 2
+                    success: true
+                    eventId: "evt_def456"
+                    publishedAt: "2024-01-17T10:00:01Z"
+                summary:
+                  total: 3
+                  successful: 2
+                  failed: 1
+        '400':
+          description: Invalid batch request - missing events or exceeds limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Batch size exceeds maximum of 1000 events"
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Topic not found with id: 1"
+        '429':
+          description: Rate limit or quota exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Publishing quota exceeded"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal server error"
+
+  /api/v1/apps/by-name/{appName}/topics/{topicName}/publish:
+    post:
+      operationId: publishEventByName
+      summary: Publish a single event (by names)
+      description: Publishes a single event using app and topic names
+      tags:
+        - Publishing
+      parameters:
+        - $ref: '#/components/parameters/appNameParam'
+        - $ref: '#/components/parameters/topicNameParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishEventRequest'
+      responses:
+        '201':
+          description: Event published successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishEventResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: App, topic, schema, or transformer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '406':
+          description: Schema validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit or quota exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/apps/by-name/{appName}/topics/{topicName}/publish/batch:
+    post:
+      operationId: batchPublishEventsByName
+      summary: Publish multiple events in batch (by names)
+      description: Publishes multiple events using app and topic names
+      tags:
+        - Publishing
+      parameters:
+        - $ref: '#/components/parameters/appNameParam'
+        - $ref: '#/components/parameters/topicNameParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchPublishRequest'
+      responses:
+        '207':
+          description: Batch processed with mixed results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchPublishResponse'
+        '400':
+          description: Invalid batch request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: App or topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit or quota exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'

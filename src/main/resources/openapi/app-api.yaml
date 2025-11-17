@@ -1,0 +1,576 @@
+openapi: 3.0.0
+info:
+  title: Splatcast App API
+  version: 1.0.0
+  description: |
+    REST API for managing applications in the Splatcast system.
+    Applications serve as top-level containers for topics and schemas.
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+
+tags:
+  - name: Apps
+    description: Application management operations
+
+components:
+  schemas:
+    App:
+      title: Application
+      type: object
+      description: Represents an application in the Splatcast system
+      required:
+        - appId
+        - appName
+        - createdAt
+        - updatedAt
+      properties:
+        appId:
+          type: integer
+          format: int64
+          description: Unique identifier for the application, auto-generated on creation
+          example: 1
+        appName:
+          type: string
+          description: Unique name of the application, used for identification and routing
+          example: "payment-service"
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+          description: Optional human-readable description of the application's purpose
+          example: "Handles payment processing and transaction management"
+          maxLength: 1000
+        createdAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp when the application was first created
+          example: "2024-01-15T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp when the application was last modified
+          example: "2024-01-20T14:45:00Z"
+
+    CreateAppRequest:
+      title: Create Application Request
+      type: object
+      description: Request payload for creating a new application
+      required:
+        - appName
+      properties:
+        appName:
+          type: string
+          description: |
+            Unique name for the new application. Must be unique across all applications.
+            Recommended to use lowercase with hyphens (e.g., 'my-app-name').
+          example: "user-service"
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+          description: Optional description providing context about the application's purpose and functionality
+          example: "Service for user authentication and profile management"
+          maxLength: 1000
+
+    UpdateAppRequest:
+      title: Update Application Request
+      type: object
+      description: Request payload for updating an existing application. All fields are optional; only provided fields will be updated.
+      properties:
+        appName:
+          type: string
+          description: |
+            New unique name for the application. Must not conflict with existing application names.
+            If not provided, the name remains unchanged.
+          example: "user-management-service"
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+          description: |
+            New description for the application. Provide null to clear the description.
+            If not provided, the description remains unchanged.
+          example: "Enhanced service for user authentication, authorization, and profile management"
+          maxLength: 1000
+
+    ErrorResponse:
+      title: Error Response
+      type: object
+      description: Standard error response returned when an operation fails
+      properties:
+        error:
+          type: string
+          description: Human-readable error message describing what went wrong
+          example: "Application with name 'user-service' already exists"
+
+paths:
+  /api/v1/apps:
+    get:
+      operationId: listApps
+      summary: List all applications
+      description: |
+        Retrieves a complete list of all applications in the system.
+        Returns an empty array if no applications exist.
+      tags:
+        - Apps
+      responses:
+        '200':
+          description: Successfully retrieved list of applications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/App'
+              example:
+                - appId: 1
+                  appName: "payment-service"
+                  description: "Handles payment processing"
+                  createdAt: "2024-01-15T10:30:00Z"
+                  updatedAt: "2024-01-15T10:30:00Z"
+                - appId: 2
+                  appName: "user-service"
+                  description: "User management"
+                  createdAt: "2024-01-16T11:00:00Z"
+                  updatedAt: "2024-01-16T11:00:00Z"
+        '500':
+          description: Internal server error occurred while retrieving applications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Database connection failed"
+
+    post:
+      operationId: createApp
+      summary: Create a new application
+      description: |
+        Creates a new application with the specified name and optional description.
+        The application name must be unique across the system.
+      tags:
+        - Apps
+      requestBody:
+        required: true
+        description: Application details for creation
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAppRequest'
+            example:
+              appName: "notification-service"
+              description: "Handles email and push notifications"
+      responses:
+        '201':
+          description: Application created successfully with auto-generated ID and timestamps
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/App'
+              example:
+                appId: 3
+                appName: "notification-service"
+                description: "Handles email and push notifications"
+                createdAt: "2024-01-17T09:15:00Z"
+                updatedAt: "2024-01-17T09:15:00Z"
+        '400':
+          description: Invalid request body - missing required fields or invalid format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "appName is required and cannot be empty"
+        '409':
+          description: Application name already exists - names must be unique
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Application with name 'notification-service' already exists"
+        '500':
+          description: Internal server error occurred during application creation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Failed to create application in database"
+
+  /api/v1/apps/{appId}:
+    get:
+      operationId: getAppById
+      summary: Get application by ID
+      description: |
+        Retrieves detailed information about a specific application using its numeric ID.
+        Use this endpoint when you have the application's ID from a previous operation.
+      tags:
+        - Apps
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application to retrieve
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          example: 1
+      responses:
+        '200':
+          description: Successfully retrieved application details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/App'
+              example:
+                appId: 1
+                appName: "payment-service"
+                description: "Handles payment processing"
+                createdAt: "2024-01-15T10:30:00Z"
+                updatedAt: "2024-01-15T10:30:00Z"
+        '400':
+          description: Invalid appId format - must be a positive integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invalid appId: must be a positive integer"
+        '404':
+          description: Application with the specified ID does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "App not found with id: 999"
+        '500':
+          description: Internal server error occurred while retrieving the application
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Database query failed"
+
+    put:
+      operationId: updateAppById
+      summary: Update application by ID
+      description: |
+        Updates an existing application's details using its numeric ID.
+        Only provided fields will be updated; omitted fields remain unchanged.
+        The new appName (if provided) must not conflict with existing applications.
+      tags:
+        - Apps
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application to update
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          example: 1
+      requestBody:
+        required: true
+        description: Fields to update. All fields are optional; only include fields you want to change.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAppRequest'
+            examples:
+              updateNameAndDescription:
+                summary: Update both name and description
+                value:
+                  appName: "payment-processing-service"
+                  description: "Enhanced payment processing with fraud detection"
+              updateDescriptionOnly:
+                summary: Update description only
+                value:
+                  description: "Updated payment processing service"
+              clearDescription:
+                summary: Clear the description
+                value:
+                  description: null
+      responses:
+        '200':
+          description: Application updated successfully with new updatedAt timestamp
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/App'
+              example:
+                appId: 1
+                appName: "payment-processing-service"
+                description: "Enhanced payment processing with fraud detection"
+                createdAt: "2024-01-15T10:30:00Z"
+                updatedAt: "2024-01-17T14:20:00Z"
+        '400':
+          description: Invalid request - either invalid appId format or invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "appName cannot be empty"
+        '404':
+          description: Application with the specified ID does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "App not found with id: 999"
+        '409':
+          description: The new appName conflicts with an existing application
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Application with name 'payment-processing-service' already exists"
+        '500':
+          description: Internal server error occurred during update
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Failed to update application in database"
+
+    delete:
+      operationId: deleteAppById
+      summary: Delete application by ID
+      description: |
+        Permanently deletes an application by its numeric ID.
+        Applications can only be deleted if they have no associated topics.
+        This operation cannot be undone.
+      tags:
+        - Apps
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          description: Unique numeric identifier of the application to delete
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          example: 1
+      responses:
+        '204':
+          description: Application deleted successfully with no content returned
+        '400':
+          description: Invalid appId format - must be a positive integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invalid appId: must be a positive integer"
+        '404':
+          description: Application with the specified ID does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "App not found with id: 999"
+        '409':
+          description: Application has associated topics and cannot be deleted. Delete all topics first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Cannot delete app: it has 5 associated topics"
+        '500':
+          description: Internal server error occurred during deletion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Failed to delete application from database"
+
+  /api/v1/apps/by-name/{appName}:
+    get:
+      operationId: getAppByName
+      summary: Get application by name
+      description: |
+        Retrieves detailed information about a specific application using its unique name.
+        Use this endpoint when you know the application name but not its ID.
+      tags:
+        - Apps
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Unique name of the application to retrieve
+          schema:
+            type: string
+            minLength: 1
+          example: "payment-service"
+      responses:
+        '200':
+          description: Successfully retrieved application details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/App'
+              example:
+                appId: 1
+                appName: "payment-service"
+                description: "Handles payment processing"
+                createdAt: "2024-01-15T10:30:00Z"
+                updatedAt: "2024-01-15T10:30:00Z"
+        '404':
+          description: Application with the specified name does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "App not found with name: unknown-service"
+        '500':
+          description: Internal server error occurred while retrieving the application
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Database query failed"
+
+    put:
+      operationId: updateAppByName
+      summary: Update application by name
+      description: |
+        Updates an existing application's details using its unique name.
+        Only provided fields will be updated; omitted fields remain unchanged.
+        The new appName (if provided) must not conflict with existing applications.
+      tags:
+        - Apps
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Current unique name of the application to update
+          schema:
+            type: string
+            minLength: 1
+          example: "payment-service"
+      requestBody:
+        required: true
+        description: Fields to update. All fields are optional; only include fields you want to change.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAppRequest'
+            examples:
+              renameApp:
+                summary: Rename the application
+                value:
+                  appName: "payment-processing-service"
+              updateDescription:
+                summary: Update description only
+                value:
+                  description: "Enhanced payment processing with fraud detection"
+      responses:
+        '200':
+          description: Application updated successfully with new updatedAt timestamp
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/App'
+              example:
+                appId: 1
+                appName: "payment-processing-service"
+                description: "Enhanced payment processing with fraud detection"
+                createdAt: "2024-01-15T10:30:00Z"
+                updatedAt: "2024-01-17T14:20:00Z"
+        '400':
+          description: Invalid request body - empty or malformed data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "appName cannot be empty"
+        '404':
+          description: Application with the specified name does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "App not found with name: unknown-service"
+        '409':
+          description: The new appName conflicts with an existing application
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Application with name 'payment-processing-service' already exists"
+        '500':
+          description: Internal server error occurred during update
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Failed to update application in database"
+
+    delete:
+      operationId: deleteAppByName
+      summary: Delete application by name
+      description: |
+        Permanently deletes an application by its unique name.
+        Applications can only be deleted if they have no associated topics.
+        This operation cannot be undone.
+      tags:
+        - Apps
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          description: Unique name of the application to delete
+          schema:
+            type: string
+            minLength: 1
+          example: "payment-service"
+      responses:
+        '204':
+          description: Application deleted successfully with no content returned
+        '404':
+          description: Application with the specified name does not exist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "App not found with name: unknown-service"
+        '409':
+          description: Application has associated topics and cannot be deleted. Delete all topics first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Cannot delete app: it has 3 associated topics"
+        '500':
+          description: Internal server error occurred during deletion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Failed to delete application from database"

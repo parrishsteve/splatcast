@@ -302,7 +302,8 @@ return newValue;
 # Publishing and Subscribing examples
 
 wscat -c ws://localhost:8080/apps/1/topics/1/subscribe
-wscat -c ws://localhost:8080/apps/by-name/test16/topics/Test-Topic2/subscribe?fromTimestamp=1696166096000
+wscat -c ws://localhost:8080/apps/by-name/test16/topics/Test-Topic2/subscribe?schemaName=Test-2.0
+wscat -c 'ws://localhost:8080/apps/by-name/test16/topics/Test-Topic2/subscribe?schemaName=Test-2.0&fromTimestamp=1696166096000'
 wscat -c ws://localhost:8080/apps/by-name/test16/topics/Test-Topic2/subscribe?fromTimestamp=2025-11-11T12:34:56Z
 wscat -c ws://localhost:8080/apps/by-name/test16/topics/Test-Topic2/subscribe?fromTimestamp=2023-11-11T09:34:56-05:00 = 11 values
 

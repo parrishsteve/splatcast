@@ -4,6 +4,40 @@ plugins {
     application
 }
 
+tasks.register<Exec>("bundleOpenAPI") {
+    dependsOn("installRedocly")
+    workingDir = file(".")
+
+    commandLine("npx", "@redocly/cli", "bundle",
+        "src/main/resources/openapi/api-docs.yaml",
+        "--output", "src/main/resources/openapi/bundled-api-docs.yaml",
+        "--ext", "yaml",
+        "--dereferenced"
+    )
+
+    doFirst {
+        println("Bundling OpenAPI with Redocly CLI...")
+    }
+
+    doLast {
+        println("OpenAPI bundled successfully!")
+    }
+}
+
+tasks.register<Exec>("installRedocly") {
+    workingDir = file(".")
+    commandLine("npm", "install", "-D", "@redocly/cli")
+
+    onlyIf {
+        !file("node_modules/@redocly/cli").exists()
+    }
+}
+
+// Update processResources to depend on bundling
+tasks.named("processResources") {
+    dependsOn("bundleOpenAPI")
+}
+
 repositories { mavenCentral() }
 
 dependencies {
@@ -52,6 +86,10 @@ dependencies {
 
     // Kafka client
     implementation("org.apache.kafka:kafka-clients:3.5.1")
+
+    // Documentation generation
+    implementation("io.ktor:ktor-server-openapi:${ktor}")
+    implementation("io.ktor:ktor-server-swagger:${ktor}")
 
     testImplementation(kotlin("test"))
 }

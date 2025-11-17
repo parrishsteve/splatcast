@@ -1,0 +1,10 @@
+This product bundles third-party software under the Apache License, Version 2.0.
+
+Included components:
+- Apache Kafka (binary distribution). See /licenses/apache/kafka/LICENSE and /licenses/apache/kafka/NOTICE
+- Apache ZooKeeper (binary distribution). See /licenses/apache/zookeeper/LICENSE and /licenses/apache/zookeeper/NOTICE
+
+Modifications:
+- Container packaging, default configuration files, and startup scripts by <Your Company>, © 2025.
+
+This product includes software developed at The Apache Software Foundation (http://www.apache.org/).

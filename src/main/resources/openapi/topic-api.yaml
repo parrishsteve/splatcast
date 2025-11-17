@@ -1,0 +1,651 @@
+openapi: 3.0.0
+info:
+  title: Splatcast Topic API
+  version: 1.0.0
+  description: |
+    Topic management API for the Splatcast system.
+    
+    Topics represent message channels within applications and can optionally be associated with schemas for validation.
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+
+tags:
+  - name: Topics
+    description: Topic management endpoints
+
+paths:
+  /api/v1/apps/{appId}/topics:
+    get:
+      operationId: listTopicsByAppId
+      summary: List topics for an application
+      description: Retrieves all topics for a specific application, optionally filtered by name
+      tags:
+        - Topics
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The application ID
+        - name: name
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter topics by name
+      responses:
+        '200':
+          description: List of topics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Topic'
+        '400':
+          description: Invalid appId format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      operationId: createTopicById
+      summary: Create a new topic
+      description: Creates a new topic for a specific application
+      tags:
+        - Topics
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The application ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTopicRequest'
+      responses:
+        '201':
+          description: Topic created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Topic'
+        '400':
+          description: Invalid request or schema not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/apps/{appId}/topics/{topicId}:
+    get:
+      operationId: getTopicById
+      summary: Get topic by ID
+      description: Retrieves a specific topic by its ID
+      tags:
+        - Topics
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The application ID
+        - name: topicId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The topic ID
+      responses:
+        '200':
+          description: Topic details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Topic'
+        '400':
+          description: Invalid ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      operationId: updateTopicById
+      summary: Update topic by ID
+      description: Updates an existing topic by its ID
+      tags:
+        - Topics
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The application ID
+        - name: topicId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The topic ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTopicRequest'
+      responses:
+        '200':
+          description: Topic updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Topic'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      operationId: patchTopicById
+      summary: Partially update topic by ID
+      description: Partially updates an existing topic by its ID
+      tags:
+        - Topics
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The application ID
+        - name: topicId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The topic ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchTopicRequest'
+      responses:
+        '200':
+          description: Topic updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Topic'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      operationId: deleteTopicById
+      summary: Delete topic by ID
+      description: Deletes a topic by its ID
+      tags:
+        - Topics
+      parameters:
+        - name: appId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The application ID
+        - name: topicId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: The topic ID
+      responses:
+        '204':
+          description: Topic deleted successfully
+        '400':
+          description: Invalid ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/apps/by-name/{appName}/topics:
+    get:
+      operationId: listTopicsByAppName
+      summary: List topics for an application (by app name)
+      description: Retrieves all topics for a specific application by name, optionally filtered by topic name
+      tags:
+        - Topics
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The application name
+        - name: name
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter topics by name
+      responses:
+        '200':
+          description: List of topics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Topic'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      operationId: createTopicByName
+      summary: Create a new topic (by app name)
+      description: Creates a new topic for a specific application by name
+      tags:
+        - Topics
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The application name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTopicRequest'
+      responses:
+        '201':
+          description: Topic created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Topic'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/apps/by-name/{appName}/topics/{topicName}:
+    get:
+      operationId: getTopicByName
+      summary: Get topic by name
+      description: Retrieves a specific topic by its name
+      tags:
+        - Topics
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The application name
+        - name: topicName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The topic name
+      responses:
+        '200':
+          description: Topic details
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Topic'
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      operationId: updateTopicByName
+      summary: Update topic by name
+      description: Updates an existing topic by its name
+      tags:
+        - Topics
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The application name
+        - name: topicName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The topic name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTopicRequest'
+      responses:
+        '200':
+          description: Topic updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Topic'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      operationId: patchTopicByName
+      summary: Partially update topic by name
+      description: Partially updates an existing topic by its name
+      tags:
+        - Topics
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The application name
+        - name: topicName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The topic name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchTopicRequest'
+      responses:
+        '200':
+          description: Topic updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Topic'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      operationId: deleteTopicByName
+      summary: Delete topic by name
+      description: Deletes a topic by its name
+      tags:
+        - Topics
+      parameters:
+        - name: appName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The application name
+        - name: topicName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The topic name
+      responses:
+        '204':
+          description: Topic deleted successfully
+        '404':
+          description: Topic not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    Topic:
+      title: Topic
+      type: object
+      description: Represents a topic within an application
+      required:
+        - topicId
+        - appId
+        - name
+      properties:
+        topicId:
+          type: integer
+          format: int64
+          description: Unique identifier for the topic
+          example: 123
+        appId:
+          type: integer
+          format: int64
+          description: ID of the application this topic belongs to
+          example: 456
+        name:
+          type: string
+          description: Name of the topic
+          example: user-events
+        schemaId:
+          type: integer
+          format: int64
+          description: ID of the schema associated with this topic
+          nullable: true
+          example: 789
+
+    CreateTopicRequest:
+      title: Create Topic Request
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Name of the topic to create
+          example: user-events
+        schemaId:
+          type: integer
+          format: int64
+          description: Optional schema ID to associate with the topic
+          nullable: true
+          example: 789
+
+    UpdateTopicRequest:
+      title: Update Topic Request
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Updated name for the topic
+          example: user-activity-events
+        schemaId:
+          type: integer
+          format: int64
+          description: Updated schema ID
+          nullable: true
+          example: 790
+
+    PatchTopicRequest:
+      title: Patch Topic Request
+      type: object
+      description: Partial update request for a topic
+      properties:
+        name:
+          type: string
+          description: Updated name for the topic
+          nullable: true
+          example: user-activity-events
+        schemaId:
+          type: integer
+          format: int64
+          description: Updated schema ID
+          nullable: true
+          example: 790
+
+    ErrorResponse:
+      title: Error Response
+      type: object
+      description: Standard error response returned when an operation fails
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Error message describing what went wrong
+          example: Topic not found
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp when the error occurred
+          example: 2024-01-15T10:30:00Z

@@ -1,0 +1,761 @@
+openapi: 3.0.0
+info:
+  title: Splatcast Schema API
+  version: 1.0.0
+  description: |
+    REST API for managing schemas within applications in the Splatcast system.
+    Schemas define the structure and validation rules for data in topics.
+    Each schema belongs to an application and can have different statuses (DRAFT, ACTIVE, DEPRECATED, RETIRED).
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+
+tags:
+  - name: Schemas
+    description: Schema management operations
+
+components:
+  schemas:
+    Schema:
+      title: Schema
+      type: object
+      description: Represents a schema definition for data validation
+      required:
+        - id
+        - appId
+        - name
+        - schemaDefinition
+        - status
+        - version
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique identifier for the schema, auto-generated on creation
+          example: 1
+        appId:
+          type: integer
+          format: int64
+          description: ID of the application this schema belongs to
+          example: 1
+        name:
+          type: string
+          description: Unique name of the schema within the application
+          example: "user-profile-v1"
+          minLength: 1
+          maxLength: 255
+        schemaDefinition:
+          type: string
+          description: JSON Schema or Avro schema definition as a string
+          example: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"}}}'
+        status:
+          type: string
+          enum: [DRAFT, ACTIVE, DEPRECATED, RETIRED]
+          description: |
+            Current status of the schema:
+            - DRAFT: Schema is being developed and can be modified
+            - ACTIVE: Schema is in production use
+            - DEPRECATED: Schema is being phased out but still usable
+            - RETIRED: Schema is no longer usable
+          example: "ACTIVE"
+        version:
+          type: integer
+          description: Version number of the schema, incremented on updates
+          example: 1
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp when the schema was first created
+          example: "2024-01-15T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp when the schema was last modified
+          example: "2024-01-20T14:45:00Z"
+
+    CreateSchemaRequest:
+      title: Create Schema Request
+      type: object
+      description: Request payload for creating a new schema
+      required:
+        - name
+        - schemaDefinition
+      properties:
+        name:
+          type: string
+          description: |
+            Unique name for the schema within the application.
+            Must be unique across all schemas in the same app.
+            Recommended to include version suffix (e.g., 'user-profile-v1').
+          example: "user-profile-v1"
+          minLength: 1
+          maxLength: 255
+        schemaDefinition:
+          type: string
+          description: |
+            Valid JSON Schema or Avro schema definition as a string.
+            Must be valid JSON and conform to schema standards.
+          example: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"}},"required":["userId","email"]}'
+        status:
+          type: string
+          enum: [DRAFT, ACTIVE]
+          description: |
+            Initial status for the schema. Defaults to DRAFT if not specified.
+            Can only be DRAFT or ACTIVE on creation.
+          example: "DRAFT"
+          default: "DRAFT"
+
+    UpdateSchemaRequest:
+      title: Update Schema Request
+      type: object
+      description: |
+        Request payload for updating an existing schema.
+        All fields are optional; only provided fields will be updated.
+        Status transitions have restrictions (e.g., cannot move from RETIRED to ACTIVE).
+      properties:
+        name:
+          type: string
+          description: |
+            New unique name for the schema. Must not conflict with existing schema names in the app.
+            If not provided, the name remains unchanged.
+          example: "user-profile-v2"
+          minLength: 1
+          maxLength: 255
+        schemaDefinition:
+          type: string
+          description: |
+            Updated schema definition. Must be valid JSON Schema or Avro schema.
+            If not provided, the definition remains unchanged.
+          example: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"},"age":{"type":"integer"}},"required":["userId","email"]}'
+        status:
+          type: string
+          enum: [DRAFT, ACTIVE, DEPRECATED, RETIRED]
+          description: |
+            New status for the schema. Status transitions are validated:
+            - DRAFT → ACTIVE, RETIRED
+            - ACTIVE → DEPRECATED, RETIRED
+            - DEPRECATED → RETIRED
+            - RETIRED → (no transitions allowed)
+          example: "ACTIVE"
+
+    ErrorResponse:
+      title: Error Response
+      type: object
+      description: Standard error response returned when an operation fails
+      properties:
+        error:
+          type: string
+          description: Human-readable error message describing what went wrong
+          example: "Schema with name 'user-profile-v1' already exists"
+
+  parameters:
+    appIdParam:
+      name: appId
+      in: path
+      required: true
+      description: Unique numeric identifier of the application
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      example: 1
+
+    schemaIdParam:
+      name: schemaId
+      in: path
+      required: true
+      description: Unique numeric identifier of the schema
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      example: 1
+
+    appNameParam:
+      name: appName
+      in: path
+      required: true
+      description: Unique name of the application
+      schema:
+        type: string
+        minLength: 1
+      example: "payment-service"
+
+    schemaNameParam:
+      name: schemaName
+      in: path
+      required: true
+      description: Unique name of the schema within the application
+      schema:
+        type: string
+        minLength: 1
+      example: "user-profile-v1"
+
+    statusQueryParam:
+      name: status
+      in: query
+      required: false
+      description: |
+        Filter schemas by status. If not provided, returns schemas of all statuses.
+        Valid values: DRAFT, ACTIVE, DEPRECATED, RETIRED
+      schema:
+        type: string
+        enum: [DRAFT, ACTIVE, DEPRECATED, RETIRED]
+      example: "ACTIVE"
+
+    limitQueryParam:
+      name: limit
+      in: query
+      required: false
+      description: Maximum number of schemas to return. Defaults to 100.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 1000
+        default: 100
+      example: 50
+
+    offsetQueryParam:
+      name: offset
+      in: query
+      required: false
+      description: Number of schemas to skip for pagination. Defaults to 0.
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+      example: 0
+
+paths:
+  /api/v1/apps/{appId}/schemas:
+    post:
+      operationId: createSchemaById
+      summary: Create a new schema
+      description: |
+        Creates a new schema for the specified application.
+        The schema name must be unique within the application.
+        The schema definition must be valid JSON Schema or Avro schema.
+      tags:
+        - Schemas
+      parameters:
+        - $ref: '#/components/parameters/appIdParam'
+      requestBody:
+        required: true
+        description: Schema details for creation
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSchemaRequest'
+            examples:
+              draftSchema:
+                summary: Create a draft schema
+                value:
+                  name: "user-profile-v1"
+                  schemaDefinition: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"}}}'
+                  status: "DRAFT"
+              activeSchema:
+                summary: Create an active schema
+                value:
+                  name: "order-event-v1"
+                  schemaDefinition: '{"type":"object","properties":{"orderId":{"type":"string"},"amount":{"type":"number"},"timestamp":{"type":"integer"}},"required":["orderId","amount","timestamp"]}'
+                  status: "ACTIVE"
+      responses:
+        '201':
+          description: Schema created successfully with auto-generated ID and timestamps
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schema'
+              example:
+                id: 1
+                appId: 1
+                name: "user-profile-v1"
+                schemaDefinition: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"}}}'
+                status: "DRAFT"
+                version: 1
+                createdAt: "2024-01-17T09:15:00Z"
+                updatedAt: "2024-01-17T09:15:00Z"
+        '400':
+          description: Invalid request - missing required fields, invalid schema definition, or invalid status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingName:
+                  summary: Missing schema name
+                  value:
+                    error: "Schema name is required"
+                invalidSchema:
+                  summary: Invalid schema definition
+                  value:
+                    error: "Schema definition is not valid JSON"
+                invalidStatus:
+                  summary: Invalid status for creation
+                  value:
+                    error: "Initial status must be DRAFT or ACTIVE"
+        '500':
+          description: Internal server error occurred during schema creation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal server error"
+
+    get:
+      operationId: listSchemasByAppId
+      summary: List schemas for an application
+      description: |
+        Retrieves a list of schemas for the specified application.
+        Supports filtering by status and pagination via limit/offset.
+      tags:
+        - Schemas
+      parameters:
+        - $ref: '#/components/parameters/appIdParam'
+        - $ref: '#/components/parameters/statusQueryParam'
+        - $ref: '#/components/parameters/limitQueryParam'
+        - $ref: '#/components/parameters/offsetQueryParam'
+      responses:
+        '200':
+          description: Successfully retrieved list of schemas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Schema'
+              example:
+                - id: 1
+                  appId: 1
+                  name: "user-profile-v1"
+                  schemaDefinition: '{"type":"object","properties":{"userId":{"type":"string"}}}'
+                  status: "ACTIVE"
+                  version: 1
+                  createdAt: "2024-01-15T10:30:00Z"
+                  updatedAt: "2024-01-15T10:30:00Z"
+                - id: 2
+                  appId: 1
+                  name: "order-event-v1"
+                  schemaDefinition: '{"type":"object","properties":{"orderId":{"type":"string"}}}'
+                  status: "DRAFT"
+                  version: 1
+                  createdAt: "2024-01-16T11:00:00Z"
+                  updatedAt: "2024-01-16T11:00:00Z"
+        '400':
+          description: Invalid query parameters - invalid status value or pagination parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invalid status value"
+        '500':
+          description: Internal server error occurred while retrieving schemas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal server error"
+
+  /api/v1/apps/{appId}/schemas/{schemaId}:
+    get:
+      operationId: getSchemaById
+      summary: Get schema by ID
+      description: |
+        Retrieves detailed information about a specific schema using its numeric ID.
+        The schema must belong to the specified application.
+      tags:
+        - Schemas
+      parameters:
+        - $ref: '#/components/parameters/appIdParam'
+        - $ref: '#/components/parameters/schemaIdParam'
+      responses:
+        '200':
+          description: Successfully retrieved schema details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schema'
+              example:
+                id: 1
+                appId: 1
+                name: "user-profile-v1"
+                schemaDefinition: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"}}}'
+                status: "ACTIVE"
+                version: 1
+                createdAt: "2024-01-15T10:30:00Z"
+                updatedAt: "2024-01-15T10:30:00Z"
+        '400':
+          description: Invalid ID format - must be positive integers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invalid ID format"
+        '404':
+          description: Schema not found for the specified app and schema ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Schema not found with id: 999"
+        '500':
+          description: Internal server error occurred while retrieving the schema
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal server error"
+
+    put:
+      operationId: updateSchemaById
+      summary: Update schema by ID
+      description: |
+        Updates an existing schema's details using its numeric ID.
+        Only provided fields will be updated; omitted fields remain unchanged.
+        Status transitions are validated according to allowed state changes.
+      tags:
+        - Schemas
+      parameters:
+        - $ref: '#/components/parameters/appIdParam'
+        - $ref: '#/components/parameters/schemaIdParam'
+      requestBody:
+        required: true
+        description: Fields to update. All fields are optional; only include fields you want to change.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSchemaRequest'
+            examples:
+              activateSchema:
+                summary: Activate a draft schema
+                value:
+                  status: "ACTIVE"
+              updateDefinition:
+                summary: Update schema definition
+                value:
+                  schemaDefinition: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"},"age":{"type":"integer"}}}'
+              deprecateSchema:
+                summary: Deprecate an active schema
+                value:
+                  status: "DEPRECATED"
+      responses:
+        '200':
+          description: Schema updated successfully with new updatedAt timestamp and incremented version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schema'
+              example:
+                id: 1
+                appId: 1
+                name: "user-profile-v1"
+                schemaDefinition: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"},"age":{"type":"integer"}}}'
+                status: "ACTIVE"
+                version: 2
+                createdAt: "2024-01-15T10:30:00Z"
+                updatedAt: "2024-01-17T14:20:00Z"
+        '400':
+          description: Invalid request - invalid schema definition, invalid status transition, or invalid ID format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidTransition:
+                  summary: Invalid status transition
+                  value:
+                    error: "Cannot transition from RETIRED to ACTIVE"
+                invalidDefinition:
+                  summary: Invalid schema definition
+                  value:
+                    error: "Schema definition is not valid JSON"
+        '404':
+          description: Schema not found for the specified app and schema ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Schema not found with id: 999"
+        '500':
+          description: Internal server error occurred during update
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal server error"
+
+    delete:
+      operationId: deleteSchemaById
+      summary: Delete schema by ID
+      description: |
+        Permanently deletes a schema by its numeric ID.
+        Schemas can only be deleted if they are not referenced by any topics or transformers.
+        This operation cannot be undone.
+      tags:
+        - Schemas
+      parameters:
+        - $ref: '#/components/parameters/appIdParam'
+        - $ref: '#/components/parameters/schemaIdParam'
+      responses:
+        '204':
+          description: Schema deleted successfully with no content returned
+        '400':
+          description: Invalid ID format - must be positive integers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invalid ID format"
+        '404':
+          description: Schema not found for the specified app and schema ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Schema not found with id: 999"
+        '409':
+          description: Schema is in use and cannot be deleted. Remove references first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Cannot delete schema: it is referenced by 3 topics"
+        '500':
+          description: Internal server error occurred during deletion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Internal server error"
+
+  /api/v1/apps/by-name/{appName}/schemas:
+    post:
+      operationId: createSchemaByName
+      summary: Create a new schema (by app name)
+      description: |
+        Creates a new schema for the specified application using the app's name.
+        The schema name must be unique within the application.
+        The schema definition must be valid JSON Schema or Avro schema.
+      tags:
+        - Schemas
+      parameters:
+        - $ref: '#/components/parameters/appNameParam'
+      requestBody:
+        required: true
+        description: Schema details for creation
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSchemaRequest'
+            example:
+              name: "user-profile-v1"
+              schemaDefinition: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"}}}'
+              status: "DRAFT"
+      responses:
+        '201':
+          description: Schema created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schema'
+        '400':
+          description: Invalid request - missing required fields, invalid schema definition, or invalid status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Application not found with the specified name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "App not found with name: unknown-service"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      operationId: listSchemasByAppName
+      summary: List schemas for an application (by app name)
+      description: |
+        Retrieves a list of schemas for the specified application using the app's name.
+        Supports filtering by status and pagination.
+      tags:
+        - Schemas
+      parameters:
+        - $ref: '#/components/parameters/appNameParam'
+        - $ref: '#/components/parameters/statusQueryParam'
+        - $ref: '#/components/parameters/limitQueryParam'
+        - $ref: '#/components/parameters/offsetQueryParam'
+      responses:
+        '200':
+          description: Successfully retrieved list of schemas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Schema'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Application not found with the specified name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/apps/by-name/{appName}/schemas/{schemaName}:
+    get:
+      operationId: getSchemaByName
+      summary: Get schema by name
+      description: |
+        Retrieves detailed information about a specific schema using both the app name and schema name.
+        Useful when you know the names but not the numeric IDs.
+      tags:
+        - Schemas
+      parameters:
+        - $ref: '#/components/parameters/appNameParam'
+        - $ref: '#/components/parameters/schemaNameParam'
+      responses:
+        '200':
+          description: Successfully retrieved schema details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schema'
+        '404':
+          description: Application or schema not found with the specified names
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                appNotFound:
+                  summary: Application not found
+                  value:
+                    error: "App not found with name: unknown-service"
+                schemaNotFound:
+                  summary: Schema not found
+                  value:
+                    error: "Schema not found with name: unknown-schema"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      operationId: updateSchemaByName
+      summary: Update schema by name
+      description: |
+        Updates an existing schema using both the app name and schema name.
+        Only provided fields will be updated; omitted fields remain unchanged.
+        Status transitions are validated.
+      tags:
+        - Schemas
+      parameters:
+        - $ref: '#/components/parameters/appNameParam'
+        - $ref: '#/components/parameters/schemaNameParam'
+      requestBody:
+        required: true
+        description: Fields to update
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSchemaRequest'
+            example:
+              status: "ACTIVE"
+              schemaDefinition: '{"type":"object","properties":{"userId":{"type":"string"},"email":{"type":"string","format":"email"},"age":{"type":"integer"}}}'
+      responses:
+        '200':
+          description: Schema updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schema'
+        '400':
+          description: Invalid request - invalid schema definition or status transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Application or schema not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      operationId: deleteSchemaByName
+      summary: Delete schema by name
+      description: |
+        Permanently deletes a schema using both the app name and schema name.
+        Schemas can only be deleted if they are not referenced by any topics or transformers.
+      tags:
+        - Schemas
+      parameters:
+        - $ref: '#/components/parameters/appNameParam'
+        - $ref: '#/components/parameters/schemaNameParam'
+      responses:
+        '204':
+          description: Schema deleted successfully
+        '404':
+          description: Application or schema not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Schema is in use and cannot be deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Cannot delete schema: it is referenced by topics"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'

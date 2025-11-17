@@ -1,0 +1,163 @@
+openapi: 3.0.0
+info:
+  title: Splatcast API Documentation
+  version: 1.0.0
+  description: |
+    Complete API documentation for the Splatcast system.
+
+    ## API Categories
+
+    - **Apps API**: Manage applications
+    - **Schemas API**: Manage schemas within applications
+    - **Topics API**: Manage topics within applications
+    - **Transformers API**: Manage transformers within topics
+    - **Publishing API**: Publish json docs to subscribers
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+
+tags:
+  - name: Apps
+    description: Application management endpoints
+  - name: Schemas
+    description: Schema management endpoints
+  - name: Topics
+    description: Topic management endpoints
+  - name: Transformers
+    description: Transformer management endpoints
+  - name: Publishing
+    description: Event publishing endpoints
+
+paths:
+  # Apps API endpoints
+  /api/v1/apps:
+    $ref: './app-api.yaml#/paths/~1api~1v1~1apps'
+
+  /api/v1/apps/{appId}:
+    $ref: './app-api.yaml#/paths/~1api~1v1~1apps~1{appId}'
+
+  /api/v1/apps/by-name/{appName}:
+    $ref: './app-api.yaml#/paths/~1api~1v1~1apps~1by-name~1{appName}'
+
+  # Schema API endpoints
+  /api/v1/apps/{appId}/schemas:
+    $ref: './schema-api.yaml#/paths/~1api~1v1~1apps~1{appId}~1schemas'
+
+  /api/v1/apps/{appId}/schemas/{schemaId}:
+    $ref: './schema-api.yaml#/paths/~1api~1v1~1apps~1{appId}~1schemas~1{schemaId}'
+
+  /api/v1/apps/by-name/{appName}/schemas:
+    $ref: './schema-api.yaml#/paths/~1api~1v1~1apps~1by-name~1{appName}~1schemas'
+
+  /api/v1/apps/by-name/{appName}/schemas/{schemaName}:
+    $ref: './schema-api.yaml#/paths/~1api~1v1~1apps~1by-name~1{appName}~1schemas~1{schemaName}'
+
+  # Topic API endpoints
+  /api/v1/apps/{appId}/topics:
+    $ref: './topic-api.yaml#/paths/~1api~1v1~1apps~1{appId}~1topics'
+
+  /api/v1/apps/{appId}/topics/{topicId}:
+    $ref: './topic-api.yaml#/paths/~1api~1v1~1apps~1{appId}~1topics~1{topicId}'
+
+  /api/v1/apps/by-name/{appName}/topics:
+    $ref: './topic-api.yaml#/paths/~1api~1v1~1apps~1by-name~1{appName}~1topics'
+
+  /api/v1/apps/by-name/{appName}/topics/{topicName}:
+    $ref: './topic-api.yaml#/paths/~1api~1v1~1apps~1by-name~1{appName}~1topics~1{topicName}'
+
+  # Transformer API endpoints
+  /api/v1/apps/{appId}/topics/{topicId}/transformers:
+    $ref: './transformer-api.yaml#/paths/~1api~1v1~1apps~1{appId}~1topics~1{topicId}~1transformers'
+
+  /api/v1/apps/{appId}/topics/{topicId}/transformers/{transformId}:
+    $ref: './transformer-api.yaml#/paths/~1api~1v1~1apps~1{appId}~1topics~1{topicId}~1transformers~1{transformId}'
+
+  /api/v1/apps/by-name/{appName}/topics/{topicName}/transformers:
+    $ref: './transformer-api.yaml#/paths/~1api~1v1~1apps~1by-name~1{appName}~1topics~1{topicName}~1transformers'
+
+  /api/v1/apps/by-name/{appName}/topics/{topicName}/transformers/{transformerName}:
+    $ref: './transformer-api.yaml#/paths/~1api~1v1~1apps~1by-name~1{appName}~1topics~1{topicName}~1transformers~1{transformerName}'
+
+  /api/v1/apps/{appId}/topics/{topicId}/publish:
+    $ref: './publishing-api.yaml#/paths/~1api~1v1~1apps~1{appId}~1topics~1{topicId}~1publish'
+
+  /api/v1/apps/{appId}/topics/{topicId}/publish/batch:
+    $ref: './publishing-api.yaml#/paths/~1api~1v1~1apps~1{appId}~1topics~1{topicId}~1publish~1batch'
+
+  /api/v1/apps/by-name/{appName}/topics/{topicName}/publish:
+    $ref: './publishing-api.yaml#/paths/~1api~1v1~1apps~1by-name~1{appName}~1topics~1{topicName}~1publish'
+
+  /api/v1/apps/by-name/{appName}/topics/{topicName}/publish/batch:
+    $ref: './publishing-api.yaml#/paths/~1api~1v1~1apps~1by-name~1{appName}~1topics~1{topicName}~1publish~1batch'
+
+components:
+  schemas:
+    # App API schemas
+    App:
+      $ref: './app-api.yaml#/components/schemas/App'
+    CreateAppRequest:
+      $ref: './app-api.yaml#/components/schemas/CreateAppRequest'
+    UpdateAppRequest:
+      $ref: './app-api.yaml#/components/schemas/UpdateAppRequest'
+
+    # Schema API schemas
+    Schema:
+      $ref: './schema-api.yaml#/components/schemas/Schema'
+    CreateSchemaRequest:
+      $ref: './schema-api.yaml#/components/schemas/CreateSchemaRequest'
+    UpdateSchemaRequest:
+      $ref: './schema-api.yaml#/components/schemas/UpdateSchemaRequest'
+
+    # Topic API schemas
+    Topic:
+      $ref: './topic-api.yaml#/components/schemas/Topic'
+    CreateTopicRequest:
+      $ref: './topic-api.yaml#/components/schemas/CreateTopicRequest'
+    UpdateTopicRequest:
+      $ref: './topic-api.yaml#/components/schemas/UpdateTopicRequest'
+    PatchTopicRequest:
+      $ref: './topic-api.yaml#/components/schemas/PatchTopicRequest'
+
+    # Transformer API schemas
+    Transformer:
+      $ref: './transformer-api.yaml#/components/schemas/Transformer'
+    CreateTransformerRequest:
+      $ref: './transformer-api.yaml#/components/schemas/CreateTransformerRequest'
+    UpdateTransformerRequest:
+      $ref: './transformer-api.yaml#/components/schemas/UpdateTransformerRequest'
+
+    # Publishing API schemas
+    PublishEventRequest:
+      $ref: './publishing-api.yaml#/components/schemas/PublishEventRequest'
+    PublishEventResponse:
+      $ref: './publishing-api.yaml#/components/schemas/PublishEventResponse'
+    BatchPublishRequest:
+      $ref: './publishing-api.yaml#/components/schemas/BatchPublishRequest'
+    BatchPublishResponse:
+      $ref: './publishing-api.yaml#/components/schemas/BatchPublishResponse'
+
+    # Shared schemas
+    ErrorResponse:
+      $ref: './app-api.yaml#/components/schemas/ErrorResponse'
+
+  parameters:
+    # Schema API parameters
+    appIdParam:
+      $ref: './schema-api.yaml#/components/parameters/appIdParam'
+    schemaIdParam:
+      $ref: './schema-api.yaml#/components/parameters/schemaIdParam'
+    appNameParam:
+      $ref: './schema-api.yaml#/components/parameters/appNameParam'
+    schemaNameParam:
+      $ref: './schema-api.yaml#/components/parameters/schemaNameParam'
+
+    # Transformer API parameters
+    topicIdParam:
+      $ref: './transformer-api.yaml#/components/parameters/topicIdParam'
+    transformIdParam:
+      $ref: './transformer-api.yaml#/components/parameters/transformIdParam'
+    topicNameParam:
+      $ref: './transformer-api.yaml#/components/parameters/topicNameParam'
+    transformerNameParam:
+      $ref: './transformer-api.yaml#/components/parameters/transformerNameParam'
