@@ -42,6 +42,11 @@ the data.
 ### A team providing a new revision on all subscribers/consumers.
 ![Basic example of onboarding a new system](readme-pics/splatcast-global-enforcement1.png)
 
+# API Documentation
+The Splatcast API Swagger documentation is available at:
+- https://parrishsteve.github.io/splatcast/
+
+
 # How Do You Get Started? 
  - Define an 'application' 
  - Define and register a 'schema'
