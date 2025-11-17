@@ -182,3 +182,11 @@ wscat -c ws://localhost:8080/apps/by-name/MyNewApp/topics/MyNewTopic/subscribe?s
  - Https support.
  - Make the doc retention time configurable and easy to configure.
 
+## Licensing
+Splatcast core source code is licensed under the [MIT License](./LICENSE).
+
+This project uses third-party components, including:
+- [Apache Kafka](https://kafka.apache.org/) (Apache License 2.0)
+- [Apache ZooKeeper](https://zookeeper.apache.org/) (Apache License 2.0)
+
+See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for details.
